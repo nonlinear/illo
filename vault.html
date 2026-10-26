@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#FBFBF9">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>Dillon — vault</title>
+<style>
+  :root { --bg:#FBFBF9; --ink:#18181B; --faint:#B4B4AC; --line:#E4E4DE; --panel:#fff; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg);
+              font:13px/1.4 -apple-system,system-ui,sans-serif; color:var(--ink);
+              overscroll-behavior:none; }
+  canvas { display:block; touch-action:none; cursor:crosshair; }
+
+  /* ---- chrome ---- */
+  .bar { position:fixed; z-index:20; display:flex; gap:6px; align-items:center;
+         background:rgba(255,255,255,.92); backdrop-filter:blur(8px);
+         border-radius:11px; box-shadow:0 2px 10px rgba(0,0,0,.10); padding:6px; }
+  /* Two groups, two jobs, deliberately different dress:
+       LEFT  = choices that SHOW something (brush, overlay). A brush button is
+               a radio: on/off, and the thumb is the payoff.
+       RIGHT = commands that DO something (undo/clear/save/load/fullscreen).
+               They fire once and keep no state — no `.on`.
+     Same visual weight for both read as "eight buttons of the same kind",
+     which is exactly what the owner called out. */
+  #brushes { left:14px; top:14px; flex-direction:column; align-items:stretch; }
+  #brushes::before { content:'response'; font:10px/1 ui-monospace,monospace;
+                     letter-spacing:.08em; text-transform:uppercase; color:var(--faint);
+                     padding:2px 4px 6px; }
+  #actions { right:14px; bottom:14px; }
+  #actions button { border:1px solid var(--line); }          /* commands: outlined */
+  #brushes button { border:1px solid transparent; }          /* choices: filled when on */
+  #meta    { left:14px; bottom:14px; font:11px/1.5 ui-monospace,monospace; color:var(--faint);
+             background:rgba(255,255,255,.9); padding:7px 10px; border-radius:9px;
+             box-shadow:0 1px 4px rgba(0,0,0,.08); white-space:pre; pointer-events:none; }
+  #sync    { position:fixed; left:14px; top:0; font:10px/1.4 ui-monospace,monospace;
+             width:max-content;
+             color:#8A8A82; background:rgba(255,255,255,.86); padding:5px 8px; border-radius:7px;
+             pointer-events:none; }
+  #sync[data-state="offline"] { color:#B45309; }
+  #sync[data-state="synced"]  { color:#15803D; }
+  button { font:inherit; border:0; border-radius:8px; padding:8px 11px; cursor:pointer;
+           background:transparent; color:var(--ink); }
+  button:hover { background:#F1F1EC; }
+  button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .sbtn { font-size:11px; padding:6px 8px; text-align:left; color:#6E6E66;
+           border:1px dashed var(--line) !important; }
+  .sbtn.on { color:#fff; border-style:solid !important; }
+  .bsw { display:flex; align-items:center; gap:8px; width:100%; text-align:left; }
+  .bsw canvas { width:26px; height:26px; flex:none; }
+  .bsw span { font-size:12px; }
+  #hint { position:fixed; left:50%; top:14px; transform:translateX(-50%);
+          background:rgba(24,24,27,.88); color:#fff; font-size:12px; padding:8px 14px;
+          border-radius:9px; pointer-events:none; opacity:0; transition:opacity .25s; z-index:30; }
+  #hint.show { opacity:1; }
+  #stats { position:fixed; right:14px; top:14px; font:11px/1.55 ui-monospace,monospace;
+           width:170px;
+           color:#6E6E66; background:rgba(255,255,255,.92); padding:8px 11px;
+           border-radius:9px; box-shadow:0 1px 4px rgba(0,0,0,.08); white-space:pre; }
+</style>
+</head>
+<body>
+<canvas id="pad"></canvas>
+<div class="bar" id="brushes"></div>
+<div class="bar" id="actions"></div>
+<div id="meta"></div>
+<div id="sync"></div>
+<div id="stats"></div>
+<div id="hint"></div>
+
+<script>
+"use strict";
+// ============================================================================
+// Dillon — M0+, "vault"
+//
+//   THE QUESTION: can you draw straight in the browser? Does pressure + velocity
+//   come through, and can BRUSHES be swapped to manifest the same stroke
+//   differently?
+//
+//   Core idea (the whole point):
+//
+//       THE LINE records. THE BRUSH manifests.
+//
+//   A stroke is pure data — {x, y, pressure, velocity, dt} sampled from the
+//   pen. No width, no color, no shape is baked in. The brush is a *function*
+//   applied at render time. Swap the brush, same stroke, different drawing.
+//
+//   No repo. No folder. One in-memory drawing, one JSON blob, four brushes.
+// ============================================================================
+
+const canvas = document.getElementById('pad');
+const ctx = canvas.getContext('2d');
+const statsEl = document.getElementById('stats');
+const hintEl = document.getElementById('hint');
+const metaEl = document.getElementById('meta');
+
+const STORE = 'dillon-vault';
+const FILE_NAME = 'illo.json';
+const API = '/api';              // same-origin; works from the local server only
+
+let dpr = Math.max(1, devicePixelRatio || 1);
+let strokes = [];                  // [{ id, pts:[[x,y,p,v,dt],...] }]
+let drawing = null;
+let activeId = null;
+let lastInputAt = 0;
+let camera = { x: 0, y: 0, zoom: 1 };
+let brushId = 'pressure';
+let showVelocity = false;
+let showPressure = false;
+
+// ─────────────────────────────────────────────────────────────── brushes ────
+// A brush = HOW a stroke manifests. Three ways to prove "different ways":
+//
+//   pressure  width from pressure only            (the classic)
+//   taper     width from pressure × velocity       (fast = thin, like a nib)
+//   speed     width from velocity alone            (pressure ignored — proves
+//                                                   the brush is autonomous)
+//   fixed     constant width, offset by velocity   (a flat brush, no width var)
+//
+// NAMING (owner, 2026-10-25): "pen taper velocity ribbon are types of pen usage?"
+// They are NOT four pens — they are four RESPONSES. Every one of them answers
+// the same question with a different signal: which measurement (pressure,
+// velocity, neither) sets the width. So the group is "response", and the ids
+// name the signal instead of pretending to be distinct tools.
+// See reviews/titulos-de-botao-2026-10-25.md.
+//
+// Every brush reads the SAME stroke. Swapping brushes must not touch the data.
+
+// ── pressure response curve ────────────────────────────────────────────────
+// There is no "bigger pressure range" to get: the device reports what it
+// reports (measured on the Oppo pen: full 0..1, but compressed at the top of a
+// normal stroke). What we CAN change is how the received value maps to width.
+// CSP ships exactly this as the "pen pressure settings" S-curve: a control
+// point grid that decides how fast the tool goes 0→100%. (Learn Clip Studio
+// Paint, 3rd ed., p.217: "controls how quickly the pen goes from 0% to 100% as
+// we increase the pressure... into an S-curve")
+//
+// linear (γ=1) wastes the top of the range; γ>1 separates light pressure (the
+// part you actually modulate when drawing); γ<1 separates heavy contact.
+function curve(p) {
+  const g = PRESSURE_GAMMA;
+  if (g === 1) return p;
+  return Math.pow(p, g);
+}
+
+const BRUSHES = {
+  pressure: {
+    label: 'pressure',
+    width(p, v) { return 0.12 + 0.88 * curve(p); }   // never vanishes
+  },
+  taper: {
+    label: 'taper',
+    // pressure sets the body, velocity cuts it — a nib speeding up thins out
+    width(p, v) { return (0.15 + 0.85 * curve(p)) * (0.45 + 0.55 * Math.exp(-v * 0.55)); }
+  },
+  speed: {
+    label: 'speed',
+    // pressure deliberately ignored: proves the brush is the solo author of width
+    width(p, v) { return 0.2 + 0.8 * Math.exp(-v * 0.9); }
+  },
+  fixed: {
+    label: 'fixed',
+    width(p, v) { return 1; },              // constant
+    offset(p, v) { return v * 2.2; }        // but the flat edge lags with speed
+  },
+};
+const BRUSH_ORDER = ['pressure', 'taper', 'speed', 'fixed'];
+const BASE_SIZE = 9;               // px at width()===1
+let PRESSURE_GAMMA = 2.0;          // <1 = heavy reads wide, >1 = light reads thin
+
+// ─────────────────────────────────────────────────────────────── rendering ──
+function resize() {
+  dpr = Math.max(1, devicePixelRatio || 1);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  redraw();
+}
+
+function stamp(a, b, brush) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const dist = Math.hypot(dx, dy);
+  const wa = brush.width(a[2], a[3]), wb = brush.width(b[2], b[3]);
+  const r0 = (BASE_SIZE / 2) * wa, r1 = (BASE_SIZE / 2) * wb;
+  // Step is a fraction of the radius: too coarse and the stamps stop touching in
+  // fast segments, which renders as a DOTTED line. (That was the dotted bug:
+  // step was 0.4·r with r maybe ~1px → gaps.)
+  const step = Math.max(0.25, Math.min(r0, r1) * 0.18);
+  const n = Math.max(1, Math.ceil(dist / step));
+  // ribbon: shift perpendicular-ish by speed — a flat brush dragging behind
+  const ox = brush.offset ? brush.offset(a[2], a[3]) : 0;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = a[0] + dx * t + ox;
+    const y = a[1] + dy * t;
+    const r = Math.max(0.4, r0 + (r1 - r0) * t);
+    ctx.beginPath();
+    if (brush.square) ctx.rect(x - r, y - r, r * 2, r * 2);
+    else ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawStroke(s, brushId_) {
+  const brush = BRUSHES[brushId_] || BRUSHES.pressure;
+  ctx.fillStyle = '#18181B';
+  const pts = s.pts;
+  if (pts.length === 1) { stamp(pts[0], pts[0], brush); return; }
+  for (let i = 1; i < pts.length; i++) stamp(pts[i - 1], pts[i], brush);
+}
+
+function redraw() {
+  ctx.setTransform(camera.zoom * dpr, 0, 0, camera.zoom * dpr, camera.x * dpr, camera.y * dpr);
+  ctx.clearRect(-1e6, -1e6, 2e6, 2e6);
+  for (const s of strokes) drawStroke(s, brushId);
+  if (showVelocity) drawVelocityOverlay();
+  if (showPressure) drawPressureOverlay();
+}
+
+// Pressure as a visible quantity: dot size = pressure, colour = velocity.
+// The mirror of the overlay below — same stroke, the other measurement.
+function drawPressureOverlay() {
+  for (const s of strokes) {
+    for (let i = 0; i < s.pts.length; i += 3) {
+      const p = s.pts[i];
+      const r = 0.8 + Math.min(5, (p[2] || 0) * 4.5);
+      ctx.fillStyle = `hsla(${210 - 160 * Math.min(1, p[3] / 3)}, 85%, 45%, .75)`;
+      ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
+// Velocity as a visible quantity: dot size = speed, color = pressure.
+function drawVelocityOverlay() {
+  for (const s of strokes) {
+    for (let i = 0; i < s.pts.length; i += 3) {
+      const p = s.pts[i];
+      const r = 0.8 + Math.min(4, p[3] * 3.2);
+      ctx.fillStyle = `hsla(${210 - 160 * (p[2] || 0)}, 85%, 45%, .75)`;
+      ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────── input ────
+// One sample = [x, y, pressure, velocity, dt]
+//   pressure : e.pressure (pen) — 1 for mouse/touch (no pressure info)
+//   velocity : px/ms derived from position + timestamp (browser measures it,
+//              we don't guess)
+//   dt       : ms since previous sample (kept so velocity stays re-derivable
+//              and so a future brush can do time-based dynamics)
+//
+// PEN ONLY. Finger never draws — palm rejection is a design decision, not a
+// filter: the pen draws, the finger will navigate (pan/zoom/undo). Until that
+// mapping exists, a finger touch does nothing at all rather than making marks.
+// This also means a resting palm cannot paint.
+const PEN_ONLY = true;
+
+function sample(e) {
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left - camera.x) / camera.zoom;
+  const y = (e.clientY - r.top - camera.y) / camera.zoom;
+  const press = e.pointerType === 'pen' ? (e.pressure || 0.5) : 1;
+  const now = e.timeStamp || performance.now();
+  const dt = lastInputAt ? Math.max(0.5, now - lastInputAt) : 16;
+  const prev = drawing && drawing.pts[drawing.pts.length - 1];
+  let v = 0;
+  if (prev) v = Math.hypot(x - prev[0], y - prev[1]) / dt;
+  lastInputAt = now;
+  return [+x.toFixed(2), +y.toFixed(2), +Math.max(0.02, Math.min(1, press)).toFixed(3),
+          +Math.min(12, v).toFixed(3), +dt.toFixed(1)];
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  // Palm rejection: only a pen (or a mouse, for desktop) may start a stroke.
+  if (PEN_ONLY && e.pointerType === 'touch') {
+    flash('pen only — finger will navigate (not implemented yet)');
+    return;
+  }
+  if (activeId !== null) return;
+  e.preventDefault();
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  activeId = e.pointerId;
+  lastInputAt = 0;
+  smoothX = null; smoothY = null;
+  hintEl.classList.remove('show');
+  drawing = { id: uid(), pts: [] };
+  drawing.pts.push(sample(e));
+  drawStroke(drawing, brushId);
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== activeId || !drawing) return;
+  e.preventDefault();
+  // Coalesced events: without these, a fast stroke loses samples AND the
+  // velocity curve becomes a staircase of dropped frames.
+  const list = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  const evs = list.length ? list : [e];
+  for (const ev of evs) {
+    const raw = sample(ev);
+    const last = drawing.pts[drawing.pts.length - 1];
+    if (last && raw[0] === last[0] && raw[1] === last[1]) continue;
+    // SMOOTHING lives in the BRUSH, not in the line.
+    //
+    // The canonical record keeps the raw sample (the truth about what the hand
+    // did). What gets rendered is a lagged average of the last N positions —
+    // this is exactly what CSP's Stabilizer is: it smooths the *tool*, and there
+    // is a separate "Post correction" that acts on the finished stroke.
+    // (CLIP STUDIO PAINT by Example: "Stabilization... will automatically
+    //  stabilize your line; at 0 no stabilization, at 100 full stabilization...
+    //  Post correction... applies stabilization after your brush stroke")
+    //
+    // Keeping it in the brush means changing SMOOTHING re-renders every stroke
+    // without touching the data — same rule as pressure and velocity.
+    const p = SMOOTHING > 0 ? smoothed(raw) : raw;
+    const prev = last;
+    drawing.pts.push(p);
+    if (prev) stamp(prev, p, BRUSHES[brushId]);
+  }
+});
+
+// EMA on position only. Pressure/velocity pass through untouched: they are
+// properties of the gesture, not of where the tip was.
+const SMOOTHING = 0.45;            // 0 = raw, 1 = maximum lag
+let smoothX = null, smoothY = null;
+function smoothed(raw) {
+  if (smoothX === null) { smoothX = raw[0]; smoothY = raw[1]; }
+  smoothX += (raw[0] - smoothX) * (1 - SMOOTHING);
+  smoothY += (raw[1] - smoothY) * (1 - SMOOTHING);
+  return [+smoothX.toFixed(2), +smoothY.toFixed(2), raw[2], raw[3], raw[4], raw[0], raw[1]];
+}
+// pts[5],pts[6] = the raw position. Renderer ignores them; the file keeps them
+// so smoothing can be changed later AND so the original gesture is not lost.
+
+function endStroke(e) {
+  if (e.pointerId !== activeId) return;
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  activeId = null;
+  if (drawing && drawing.pts.length) {
+    strokes.push(drawing);
+    report(drawing);
+    // Local mirror is cheap and synchronous; the server is neither.
+    persistLocal();
+    queueRemote(drawing);
+  }
+  drawing = null;
+}
+
+// ──────────────────────────────────────────── server sync (never blocks ink) ──
+//
+// RULE: nothing in this section may run inside a pointer event, and nothing in
+// here may be awaited by the render path. The pen writes to memory; the network
+// catches up behind it.
+//
+// Why: autosaving the whole document to localStorage on a 300ms timer after each
+// stroke means serialize(N) grows with the drawing, and that cost lands in the
+// drawing loop. At a few hundred strokes you can feel the canvas stutter at the
+// end of every line. That is the delay the owner called out.
+//
+// The fix is structural, not a bigger timer: strokes are APPENDED in small
+// batches, and the call is fired outside the input handler, so a slow or dead
+// server costs a queue entry — never a dropped sample.
+
+let PAGE = null;                 // page id on the server, null = not connected
+let outbox = [];                 // strokes waiting to be sent
+let sending = false;
+let lastSend = 0;
+let syncState = 'local';         // local | syncing | synced | offline
+let failures = 0;
+
+function queueRemote(stroke) {
+  if (!PAGE) return;
+  outbox.push({ id: stroke.id, pts: stroke.pts });
+  // Do NOT reset the timer on every stroke. Drawing continuously used to push
+  // the deadline forward forever, so a session in flow never saved anything
+  // until the pen stopped. Only arm if nothing is pending.
+  if (!sendTimer && !sending) scheduleSend(700);
+  // Safety valve: if the queue is growing despite the timer, force a flush.
+  else if (outbox.length > 200 && !sending) scheduleSend(0);
+}
+
+let sendTimer = null;
+function scheduleSend(ms) {
+  if (sendTimer) clearTimeout(sendTimer);
+  // setTimeout, never a synchronous call: the browser has already painted the
+  // stroke before any network request is even constructed.
+  sendTimer = setTimeout(() => { sendTimer = null; flushRemote(); }, ms);
+}
+
+async function flushRemote() {
+  if (!PAGE || sending || !outbox.length) return;
+  sending = true;
+  // Bounded BOTH by count and by bytes.
+  //
+  // keepalive:true is deliberately NOT used. It caps the body at 64KB and
+  // rejects anything larger with "Failed to fetch" — measured: a 64-stroke
+  // batch is ~107KB, so every save failed silently and the outbox grew forever
+  // while the UI still said "saved". Count-only batching was the other half of
+  // that bug: 64 strokes is already past the limit.
+  const batch = [];
+  let bytes = 0;
+  for (const s of outbox) {
+    const n = JSON.stringify(s).length;
+    if (batch.length && bytes + n > 48000) break;   // stay well under 64KB
+    batch.push(s); bytes += n;
+  }
+  if (!batch.length) { sending = false; return; }
+  syncState = 'syncing'; paintSync();
+  try {
+    const res = await fetch(API + '/append', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: PAGE, strokes: batch }),
+    });
+    if (!res.ok) throw new Error('http ' + res.status);
+    outbox.splice(0, batch.length);
+    failures = 0;
+    syncState = outbox.length ? 'syncing' : 'synced';
+    lastSend = Date.now();
+  } catch (_) {
+    failures++;
+    syncState = 'offline';
+    // Back off. A tight retry loop on a dead server is exactly the jank we are
+    // avoiding; the strokes stay in the outbox and localStorage still has them.
+    if (failures < 12) scheduleSend(Math.min(15000, 800 * Math.pow(1.5, failures)));
+  } finally {
+    sending = false;
+    paintSync();
+    if (outbox.length && syncState !== 'offline' && !sendTimer) scheduleSend(120);
+  }
+}
+
+function paintSync() {
+  const el = document.getElementById('sync');
+  if (!el) return;
+  const map = { local: 'local only', syncing: 'saving…', synced: 'saved', offline: 'offline — kept locally' };
+  el.textContent = (PAGE ? 'page ' + PAGE + ' · ' : '') + map[syncState];
+  el.dataset.state = syncState;
+}
+
+async function connectServer() {
+  // file:// has no origin server; skip cleanly instead of throwing in console.
+  if (location.protocol === 'file:') { syncState = 'local'; paintSync(); return; }
+  try {
+    // reuse the last page id for this browser so a reload continues the same page
+    let id = localStorage.getItem('illo-page');
+    const res = await fetch(API + '/page', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(id ? { id } : {}),
+    });
+    if (!res.ok) throw new Error('http ' + res.status);
+    const meta = await res.json();
+    PAGE = meta.id;
+    localStorage.setItem('illo-page', PAGE);
+    // The server may already have strokes (reload, other device). Adopt them
+    // only when the local canvas is empty, so we never clobber unsent ink.
+    if (!strokes.length && (meta.strokes || 0) > 0) {
+      const r = await fetch(API + '/page/' + encodeURIComponent(PAGE));
+      if (r.ok) {
+        const doc = await r.json();
+        adopt({ strokes: (doc.strokes || []).map(s => ({ id: s.id, points: s.pts })) });
+        markBrush(); redraw();
+        flash('resumed ' + (doc.strokes || []).length + ' strokes from page ' + PAGE);
+      }
+    }
+    syncState = 'synced'; paintSync(); paintMeta();
+  } catch (_) {
+    PAGE = null;
+    syncState = 'local'; paintSync();
+  }
+}
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+
+// ───────────────────────────────────────────────────── what we just learned ──
+// The acceptance test, inside the product: what did the pen actually deliver?
+let lastReport = null;
+function report(s) {
+  const ps = s.pts.map(p => p[2]);
+  const vs = s.pts.map(p => p[3]);
+  const lo = Math.min(...ps), hi = Math.max(...ps);
+  const vAvg = vs.reduce((a, b) => a + b, 0) / vs.length;
+  const vMax = Math.max(...vs);
+  lastReport = { n: s.pts.length, lo, hi, vAvg, vMax };
+  console.log(`[illo] stroke ${s.id}: ${s.pts.length} pts | pressure ${lo.toFixed(2)}–${hi.toFixed(2)} | ` +
+              `velocity avg ${vAvg.toFixed(2)} max ${vMax.toFixed(2)} px/ms`);
+  if (s.pts.length > 8 && hi - lo < 0.02) flash('pressure flat (' + lo.toFixed(2) + ') — stylus?');
+  if (s.pts.length > 8 && vMax < 0.02) flash('velocity flat — timing not arriving?');
+  paintStats();
+}
+
+function paintStats() {
+  const r = lastReport;
+  if (!r) { statsEl.textContent = 'draw something'; return; }
+  statsEl.textContent =
+    `${r.n} samples\n` +
+    `pressure ${r.lo.toFixed(2)}–${r.hi.toFixed(2)}\n` +
+    `velocity  avg ${r.vAvg.toFixed(2)}\n` +
+    `          max ${r.vMax.toFixed(2)} px/ms`;
+}
+
+// ─────────────────────────────────────────────────────────────── brushes UI ─
+const brushWrap = document.getElementById('brushes');
+BRUSH_ORDER.forEach(id => {
+  const b = document.createElement('button');
+  b.className = 'bsw';
+  b.dataset.brush = id;
+  const thumb = document.createElement('canvas');
+  thumb.width = 26 * dpr; thumb.height = 26 * dpr;
+  b.appendChild(thumb);
+  const lbl = document.createElement('span'); lbl.textContent = BRUSHES[id].label;
+  b.appendChild(lbl);
+  b.onclick = () => { brushId = id; markBrush(); redraw(); persistLocal(); paintMeta(); };
+  brushWrap.appendChild(b);
+  drawThumb(thumb, id);
+});
+
+// A tiny demo stroke drawn with the real brush function — the swatch IS the
+// brush. Pressure swells in the middle, velocity stays put, so you see the
+// brush's own signature.
+function drawThumb(cv, id) {
+  const c = cv.getContext('2d');
+  c.clearRect(0, 0, cv.width, cv.height);
+  const brush = BRUSHES[id];
+  c.save(); c.scale(dpr, dpr);
+  c.fillStyle = '#18181B';
+  const N = 40, w = 26, h = 26;
+  let prev = null;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const p = [4 + t * (w - 8), h / 2 + Math.sin(t * Math.PI) * 2.5, 0.15 + 0.85 * Math.sin(Math.PI * t), 0.6];
+    if (prev) {
+      // reuse the real stamp() logic against this small context
+      stampThumb(c, prev, p, brush);
+    }
+    prev = p;
+  }
+  c.restore();
+}
+function stampThumb(c, a, b, brush) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dist = Math.hypot(dx, dy);
+  const wa = brush.width(a[2], a[3]), wb = brush.width(b[2], b[3]);
+  const r0 = 3.2 * wa, r1 = 3.2 * wb;
+  const step = Math.max(0.5, Math.min(r0, r1) * 0.4);
+  const n = Math.max(1, Math.ceil(dist / step));
+  const ox = brush.offset ? brush.offset(a[2], a[3]) : 0;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    c.beginPath();
+    c.arc(a[0] + dx * t + ox, a[1] + dy * t, Math.max(0.3, r0 + (r1 - r0) * t), 0, Math.PI * 2);
+    c.fill();
+  }
+}
+function markBrush() {
+  document.querySelectorAll('.bsw').forEach(el => el.classList.toggle('on', el.dataset.brush === brushId));
+}
+
+// ─────────────────────────────────────────────────────────────── actions ────
+// SHOW vs DO (owner, 2026-10-25: "separate buttons that show something from
+// buttons that do something").
+//
+//   SHOW = a lens on the data. Toggles persist; the button behaves like a
+//          checkbox and lives under the brushes, because it changes what you
+//          SEE, not what the drawing IS. Nothing in the file changes.
+//   DO   = an operation on the drawing. Fires once, keeps no state, outlined.
+//
+// `speed` (the overlay) used to sit bottom-right wedged among undo/clear/save —
+// a viewer among mutators, indistinguishable in dress. Moved left, renamed to
+// what it is: `velocity` (the measurement) rather than `speed` (which is also
+// the name of a brush response).
+const act = document.getElementById('actions');
+function btn(label, title, fn) {
+  const b = document.createElement('button');
+  b.textContent = label; b.title = title; b.onclick = fn;
+  act.appendChild(b); return b;
+}
+
+// ── SHOW: measurement lenses, in the left column under a divider ────────────
+const showBar = document.createElement('div');
+showBar.style.cssText = 'display:flex;flex-direction:column;gap:6px;' +
+                        'margin-top:6px;padding-top:8px;border-top:1px solid var(--line);';
+brushWrap.appendChild(showBar);
+function showBtn(label, title, get, set) {
+  const b = document.createElement('button');
+  b.textContent = 'show: ' + label; b.title = title;
+  b.classList.add('sbtn');
+  b.dataset.show = label;
+  b.onclick = () => { set(!get()); paintShow(); paintMeta(); };
+  showBar.appendChild(b);
+  paintShow();
+  return b;
+}
+function paintShow() {
+  document.querySelectorAll('.sbtn').forEach(b => {
+    const on = b.dataset.show === 'velocity' ? showVelocity : showPressure;
+    b.classList.toggle('on', !!on);
+  });
+}
+showBtn('velocity', 'Show the measurement: dot size = velocity, colour = pressure',
+  () => showVelocity, v => { showVelocity = v; redraw(); flash(v ? 'velocity overlay on' : 'overlay off'); });
+showBtn('pressure', 'Show the measurement: dot size = pressure, colour = velocity',
+  () => showPressure, v => { showPressure = v; redraw(); flash(v ? 'pressure overlay on' : 'overlay off'); });
+
+// the two lenses live at the BOTTOM, under the divider, labelled so they cannot
+// be read as two more brushes: "show: velocity" is a question about the data.
+
+btn('undo', 'Remove last stroke', () => {
+  if (!strokes.length) { flash('nothing to undo'); return; }
+  strokes.pop(); lastReport = null; paintStats(); redraw(); persistLocal(); pushReplace();
+});
+btn('clear', 'Clear the drawing (asks first)', () => {
+  if (!strokes.length) return;
+  if (!confirm('Clear the drawing?')) return;
+  strokes = []; lastReport = null; paintStats(); redraw(); persistLocal(); pushReplace();
+});
+btn('full', 'Full screen', toggleFullscreen);
+btn('save', 'Download illo.json', saveFile);
+const fileInput = document.createElement('input');
+fileInput.type = 'file'; fileInput.accept = '.json,application/json';
+fileInput.style.display = 'none';
+fileInput.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; loadFile(f); };
+document.body.appendChild(fileInput);
+btn('load', 'Load illo.json', () => fileInput.click());
+
+// ────────────────────────────────────────────────────────── full screen ─────
+// Two different problems, two different answers — DOM fullscreen is not a
+// solution on Android.
+//
+//   Desktop / iPad Safari: requestFullscreen() works → the button does it.
+//   Android Chrome: the element API may exist, but a PAGE CANNOT OPEN ITSELF in
+//                   standalone mode. Only "Add to Home screen" does that, and
+//                   only with a manifest + display:standalone. Hence
+//                   /manifest.webmanifest and the meta tags above: once
+//                   installed there is no browser chrome and DOM fullscreen is
+//                   already the whole screen.
+//
+// So: try the API; if it is absent or refused, say the real next step instead of
+// silently doing nothing.
+async function toggleFullscreen() {
+  const el = document.documentElement;
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+    return;
+  }
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) {
+    flash(isStandalone() ? 'no browser chrome here — you are full screen'
+                         : 'tip: menu → "Add to Home screen" → opens full screen');
+    return;
+  }
+  try { await req.call(el, { navigationUI: 'hide' }); }
+  catch (_) { flash('full screen refused — use "Add to Home screen"'); }
+}
+function isStandalone() {
+  return matchMedia('(display-mode: standalone)').matches ||
+         matchMedia('(display-mode: fullscreen)').matches ||
+         navigator.standalone === true;
+}
+document.addEventListener('fullscreenchange', () => {
+  // the canvas is sized from innerWidth/innerHeight, and the viewport only
+  // settles after the transition — resize now and again once it settles.
+  resize(); setTimeout(resize, 150);
+});
+if (isStandalone()) {
+  // the OS already gave us the screen; hide the dead button rather than offer it
+  const fb = document.querySelector('#actions button[title="Full screen"]');
+  if (fb) fb.style.display = 'none';
+}
+
+// ───────────────────────────────────────────────────────────────── file ─────
+function uid() { return 's' + Math.random().toString(36).slice(2, 10); }
+
+// Two persistence tiers, deliberately different:
+//   persistLocal()  cheap, synchronous, bounded (only the last N strokes).
+//                   Its job is "a reload must not lose ink".
+//   flushRemote()   authoritative, async, never on the input path.
+//                   Its job is "the page exists somewhere durable".
+const LOCAL_KEEP = 40;           // strokes kept in the localStorage mirror
+
+function doc() {
+  return {
+    format: 'illo',
+    version: '0.4-vault',
+    canvas: { width: Math.round(innerWidth), height: Math.round(innerHeight) },
+    // the drawing is brush-agnostic: strokes carry no width, no color
+    strokes: strokes.map(s => ({ id: s.id, points: s.pts })),
+    view: { brush: brushId, camera: { x: camera.x, y: camera.y, zoom: camera.zoom },
+            pressureGamma: PRESSURE_GAMMA, smoothing: SMOOTHING },
+  };
+}
+
+let saveTimer = null;
+function persistLocal() {
+  clearTimeout(saveTimer);
+  // Serializing every stroke on every pointerup is the bug. Keep the mirror
+  // bounded so its cost does not grow with the drawing.
+  saveTimer = setTimeout(() => {
+    try {
+      const tail = strokes.length > LOCAL_KEEP ? strokes.slice(-LOCAL_KEEP) : strokes;
+      const d = doc();
+      d.strokes = tail.map(s => ({ id: s.id, points: s.pts }));
+      d.strokesTrimmed = strokes.length - tail.length;
+      localStorage.setItem(STORE, JSON.stringify(d));
+      paintMeta();
+    } catch (_) { /* storage full: the server is the authority anyway */ }
+  }, 400);
+}
+
+function adopt(d) {
+  strokes = (d.strokes || []).map(s => ({
+    id: s.id || uid(),
+    pts: (s.points || []).filter(p => Array.isArray(p) && p.length >= 2).map(p => [
+      +p[0], +p[1],
+      +Math.max(0.02, Math.min(1, +p[2] || 1)),
+      +Math.max(0, +p[3] || 0),
+      +Math.max(0.5, +p[4] || 16),
+      +(+p[5] || +p[0]),      // raw x (if the file has it)
+      +(+p[6] || +p[1]),      // raw y
+    ]),
+  })).filter(s => s.pts.length);
+  // old files say 'pen'/'velocity'/'ribbon' — map the renamed ids on load so a
+  // saved drawing keeps its look instead of silently snapping to `pressure`.
+  const RENAMED = { pen: 'pressure', velocity: 'speed', ribbon: 'fixed' };
+  const want = d.view && (RENAMED[d.view.brush] || d.view.brush);
+  if (want && BRUSHES[want]) brushId = want;
+  if (d.view && d.view.camera) camera = d.view.camera;
+  if (d.view && typeof d.view.pressureGamma === 'number') PRESSURE_GAMMA = d.view.pressureGamma;
+}
+
+function restore() {
+  const raw = localStorage.getItem(STORE);
+  if (!raw) return false;
+  try { adopt(JSON.parse(raw)); return strokes.length > 0; } catch (_) { return false; }
+}
+
+function saveFile() {
+  const blob = new Blob([JSON.stringify(doc(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = FILE_NAME;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  flash('saved → ' + FILE_NAME);
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    let d; try { d = JSON.parse(r.result); } catch (e) { flash('not JSON'); return; }
+    if (!d || d.format !== 'illo' || !Array.isArray(d.strokes)) { flash('not an illo file'); return; }
+    adopt(d); markBrush(); redraw(); persistLocal();
+    flash(`${strokes.length} strokes · drawing in ${BRUSHES[brushId].label} — try another brush`);
+  };
+  r.onerror = () => flash('could not read file');
+  r.readAsText(file);
+}
+
+// ───────────────────────────────────────────────────────── separable check ──
+// The claim under test: "the stroke is data, the brush is a function."
+// This function is the proof — it renders every stroke through every brush and
+// hashes the results. Identical input, four different drawings.
+window.__illoProbe = function () {
+  const out = {};
+  const off = document.createElement('canvas');
+  off.width = 400; off.height = 300;
+  const oc = off.getContext('2d');
+  for (const id of BRUSH_ORDER) {
+    oc.clearRect(0, 0, off.width, off.height);
+    // render the first stroke through this brush only
+    const s = strokes[0];
+    if (!s) { out[id] = null; continue; }
+    let sum = 0;
+    const brush = BRUSHES[id];
+    let prev = null;
+    for (const p of s.pts) {
+      if (prev) {
+        const n = 8;
+        for (let i = 0; i <= n; i++) {
+          const t = i / n;
+          const x = prev[0] + (p[0] - prev[0]) * t;
+          const y = prev[1] + (p[1] - prev[1]) * t;
+          const w1 = brush.width(prev[2], prev[3]), w2 = brush.width(p[2], p[3]);
+          sum += ((w1 + (w2 - w1) * t) * (BASE_SIZE / 2)).toFixed(2) * 1;
+          oc.fillRect(x, y, 1, 1);
+        }
+      }
+      prev = p;
+    }
+    out[id] = +sum.toFixed(3);
+  }
+  return out;
+};
+
+// ────────────────────────────────────────────────────────────── zoom / pan ──
+// Touch is FOR NAVIGATION ONLY, never drawing (see PEN_ONLY). Two fingers pan
+// and pinch. One finger does nothing yet — that is where "finger does certain
+// actions" will land.
+const pointers = new Map();
+let gesture = null;
+function gM() {
+  const v = [...pointers.values()], a = v[0], b = v[1];
+  return { mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1 };
+}
+canvas.addEventListener('pointerdown', (e) => {
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pointers.size === 2) { drawing = null; activeId = null; gesture = gM(); }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (!gesture || pointers.size < 2) return;
+  const m = gM();
+  camera.x += m.mx - gesture.mx; camera.y += m.my - gesture.my;
+  const f = m.d / gesture.d;
+  camera.zoom = Math.max(0.1, Math.min(8, camera.zoom * f));
+  camera.x = m.mx - (m.mx - camera.x) * f;
+  camera.y = m.my - (m.my - camera.y) * f;
+  gesture = { mx: m.mx, my: m.my, d: m.d };
+  redraw();
+});
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * 0.0015);
+  camera.zoom = Math.max(0.1, Math.min(8, camera.zoom * f));
+  camera.x = e.clientX - (e.clientX - camera.x) * f;
+  camera.y = e.clientY - (e.clientY - camera.y) * f;
+  redraw();
+}, { passive: false });
+['pointerup', 'pointercancel'].forEach(ev => canvas.addEventListener(ev, (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) gesture = null;
+}));
+
+// keyboard: 1-4 = brushes, g = pressure curve, s = smoothing
+addEventListener('keydown', (e) => {
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= BRUSH_ORDER.length) {
+    brushId = BRUSH_ORDER[n - 1]; markBrush(); redraw(); persistLocal(); paintMeta();
+  }
+  if (e.key === 'f') toggleFullscreen();
+  if (e.key === 'v') {
+    showVelocity = !showVelocity; redraw(); paintShow();
+  }
+  if (e.key === 'g') {
+    PRESSURE_GAMMA = PRESSURE_GAMMA >= 2.5 ? 1 : +(PRESSURE_GAMMA + 0.5).toFixed(1);
+    redraw(); paintMeta();
+    flash('pressure curve γ=' + PRESSURE_GAMMA.toFixed(1) +
+          (PRESSURE_GAMMA === 1 ? ' (linear)' : PRESSURE_GAMMA > 1 ? ' (light reads thin)' : ' (heavy reads wide)'));
+  }
+});
+
+// Undo/clear cannot be an append: the server would keep the stroke we removed.
+// Rewrite the page (atomic on the server side) and drop the outbox, since the
+// full state supersedes anything still queued.
+async function pushReplace() {
+  if (!PAGE) return;
+  outbox = [];
+  try {
+    await fetch(API + '/page/' + encodeURIComponent(PAGE) + '/replace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ strokes: strokes.map(s => ({ id: s.id, pts: s.pts })) }),
+    });
+    syncState = 'synced';
+  } catch (_) { syncState = 'offline'; }
+  paintSync();
+}
+
+// ────────────────────────────────────────────────────────────────── meta ─────
+// ── meta: one line, anchored bottom-left, OUTSIDE the panel column ──────────
+function paintMeta() {
+  const s = strokes.length;
+  metaEl.textContent =
+    `${BRUSHES[brushId].label} · ${s} stroke${s === 1 ? '' : 's'} · ${Math.round(camera.zoom * 100)}%\n` +
+    `γ ${PRESSURE_GAMMA.toFixed(1)} · smooth ${Math.round(SMOOTHING * 100)}% · pen only`;
+  // the sync chip sits under the brush panel; keep it from landing on top of it
+  const syncEl = document.getElementById('sync');
+  if (syncEl) {
+    const b = brushWrap.getBoundingClientRect();
+    syncEl.style.top = Math.round(b.bottom + 8) + 'px';
+  }
+}
+let flashTimer = null;
+function flash(msg) {
+  hintEl.textContent = msg; hintEl.classList.add('show');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => hintEl.classList.remove('show'), 1900);
+}
+
+// ───────────────────────────────────────────────────────────────── boot ─────
+addEventListener('resize', resize);
+addEventListener('beforeunload', () => { try { localStorage.setItem(STORE, JSON.stringify(doc())); } catch (_) {} });
+
+const had = restore();
+markBrush();
+resize();
+paintStats();
+paintMeta();
+connectServer();                 // async, never awaited: boot does not wait on it
+if (!had) {
+  hintEl.textContent = 'draw — then switch brush (1-4) and watch the same stroke change';
+  hintEl.classList.add('show');
+  setTimeout(() => hintEl.classList.remove('show'), 4200);
+}
+</script>
+</body>
+</html>
