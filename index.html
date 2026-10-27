@@ -158,7 +158,7 @@
   <div class="statusbar panel">
     <span class="dot" id="statusDot"></span>
     <span id="statusText" aria-live="polite">Pen · 6 px</span>
-    <span class="ver" id="appVer" title="Build version — what this page actually runs">v0.2.0</span>
+    <span class="ver" id="appVer" title="Build version — what this page actually runs">v0.2.2</span>
   </div>
 
   <div class="zoombar panel">
@@ -403,14 +403,23 @@
       for (let j = 0; j < strokes.length; j++) {
         if (j === si) continue;
         const o = strokes[j];
-        if (!o || o.tool === 'eraser' || o.pts.length < 2) continue;
+        // _welcome is a demo scribble, not part of the drawing: it must never be a
+        // cutting edge. Without this, the first cut of a fresh session stops at a
+        // crossing that does not exist.
+        if (!o || o._welcome || o.tool === 'eraser' || o.pts.length < 2) continue;
         for (let k = 1; k < o.pts.length; k++) {
           const c = o.pts[k - 1], d = o.pts[k];
           if (Math.hypot(d[0] - c[0], d[1] - c[1]) < SEG_MIN) continue;
           const hit = segIntersect(a, b, c, d);
           if (!hit) continue;
           const t = hit[0];
-          out.push({ t: (i - 1 + t) / total, x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t });
+          const ct = (i - 1 + t) / total;
+          // A crossing lands on the shared vertex of two consecutive segments of the OTHER
+          // stroke, so the same point is reported twice (four times in a junction). One
+          // crossing must appear once -- duplicated crossings corrupted the bracket and the
+          // crossing count that breaks ties.
+          if (out.some(o => Math.abs(o.t - ct) < 1e-6)) continue;
+          out.push({ t: ct, x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t });
         }
       }
     }
@@ -466,61 +475,156 @@
     const makesNearEnd = fromT > 1e-9;
     if (!makesFarEnd && !makesNearEnd) return false;   // whole stroke tapped, nothing to cut
 
+    // Capture the ORIGINAL points first. cutInPlace mutates s.pts in place, so reading
+    // s.pts after a cut splits the ALREADY-SHRUNKEN stroke -- which silently produced the
+    // wrong surviving half (left of the tap instead of right of it).
+    const orig = s.pts;
+
     // 1. The FAR survivor: keep the tail (toT,1] as a brand-new stroke at the original slot.
     if (makesFarEnd && makesNearEnd) {
-      const pieces = splitPointsAt(s.pts, toT);
+      const pieces = splitPointsAt(orig, toT);
       if (!pieces) return false;
       state.strokes.splice(si + 1, 0, { tool: s.tool, color: s.color, size: s.size, pts: pieces[1] });
     }
-    // 2. The NEAR side of the (unmodified) stroke: trim everything after fromT away.
+    // 2. The NEAR side: trim everything after fromT away.
     if (makesNearEnd) {
-      if (!cutInPlace(si, { t: fromT }, true)) return false;
+      const pieces = splitPointsAt(orig, fromT);
+      if (!pieces) return false;
+      s.pts = pieces[0];
     } else if (makesFarEnd) {
       // Tap covers the start: keep the end, drop the head.
-      if (!cutInPlace(si, { t: toT }, false)) return false;
+      const pieces = splitPointsAt(orig, toT);
+      if (!pieces) return false;
+      s.pts = pieces[1];
     }
     return true;
   }
 
   // ---------- erase to intersection (the MVP, and the whole of it) ----------
-  // Tap = pick the stroke nearest to the pointer, then erase to the nearest crossing on each side.
+  // Tap = pick the LINE the drawing eye is on, then erase to the nearest crossing on each side.
   // ONE gesture, ONE action. No modes, no menu. The grammar is not designed yet.
+  //
+  // Which line: tap ON a crossing sits at distance 0 from BOTH lines, so a plain
+  // "closest segment wins" tie-break picked whichever happened to come last (the
+  // vertical), and then found no crossing bracket on it -> the gesture answered with
+  // silence. A tie is broken toward the line the tap is ALONG: the tap direction matching
+  // the segment direction is what a person means when they touch a line at a junction.
+  // Still a tie (perfect X)? Prefer the LONGER stroke -- the one being trimmed, not the
+  // short butting one.
+  // Tap priority, compared IN ORDER. Do not fold these into one number: a tie-breaker
+  // must never be able to beat a real distance difference.
+  //  1. CLOSEST line. A tap on a clear stretch of one line must never be stolen.
+  //  2. LONGEST stroke within tolerance. On a junction both are at distance 0, and
+  //     "axis" does NOT disambiguate (a tap mid-height on a vertical is on its axis too).
+  //     What a person means by touching a junction is the line the junction sits ON -- the
+  //     long line being subdivided, not the short line that crosses it.
+  //  3. MORE CROSSINGS, then the axis, as last resorts.
+  function betterTap(c, best) {
+    if (!best) return true;
+    if (c.d < best.d - 1) return true;          // 1px tolerance: a tap ON a junction is 0 for both
+    if (c.d > best.d + 1) return false;
+    if (c.len > best.len * 1.25) return true;
+    if (c.len * 1.25 < best.len) return false;
+    if (c.nx !== best.nx) return c.nx > best.nx;
+    return c.onAxis && !best.onAxis;
+  }
+
+  // How much of the tap's offset from a segment runs ALONG that segment, in [0,1].
+  // A tap ON a junction is equidistant from both lines; what disambiguates is which line
+  // the pointer sits on the axis of.
+  function axisMatch(ax, ay, bx, by, x, y) {
+    const sx = bx - ax, sy = by - ay, L = Math.hypot(sx, sy) || 1;
+    const ux = x - ax, uy = y - ay;
+    const along = Math.abs((ux * sx + uy * sy) / L);
+    const perp = Math.abs((ux * sy - uy * sx) / L);
+    return along / (along + perp + 1e-6);
+  }
+
+  // The next crossing strictly PAST `tapT` in direction dir (-1 = before, +1 = after).
+  // -1e9 / +1e9 mean "no crossing on that side": the cut runs to the end of the line.
+  function nextCrossing(cs, tapT, dir) {
+    let best = dir > 0 ? 1e9 : -1e9;
+    for (const c of cs) {
+      if (dir > 0) { if (c.t > tapT + 1e-6 && c.t < best) best = c.t; }
+      else { if (c.t < tapT - 1e-6 && c.t > best) best = c.t; }
+    }
+    return best;
+  }
+
+  function strokeLength(s) {    let L = 0;
+    for (let i = 1; i < s.pts.length; i++) L += Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]);
+    return L;
+  }
+
   function eraseToIntersection(pp) {
     const x = pp[0], y = pp[1];
-    let bestI = -1, bestA = 0, bestB = 0, bestT = 0, bestD = Infinity;
+    // One tap is one undo step. The flag is read by endStroke(): it pushes history ONCE
+    // per gesture. The eraser must never push by itself -- pushHistory() snapshots the
+    // state AFTER the mutation, so an extra push would bury the pre-cut state and leave
+    // Undo with nothing to restore.
+    const done = eraseToIntersectionInner(x, y);
+    if (done) erasedAny = true;
+    return done;
+  }
+
+  function eraseToIntersectionInner(x, y) {
+    let bestI = -1, bestA = 0, bestB = 0, best = null;
     for (let i = state.strokes.length - 1; i >= 0; i--) {
       const s = state.strokes[i], p = s.pts;
-      if (p.length < 2) continue;
+      if (s._welcome || p.length < 2) continue;
+      const nx = crossingsFor(i, state.strokes).length;
+      const len = strokeLength(s);
       for (let k = 1; k < p.length; k++) {
         const a = p[k - 1], b = p[k];
         if (Math.hypot(b[0] - a[0], b[1] - a[1]) < SEG_MIN) continue;
         if (!segHit(a, b, x, y)) continue;
         const d = distToSeg(x, y, a[0], a[1], b[0], b[1]);
-        if (d < bestD) { bestD = d; bestI = i; bestA = k - 1; bestB = k; }
+        const cand = { d, len, nx, onAxis: axisMatch(a[0], a[1], b[0], b[1], x, y) > 0.9 };
+        if (betterTap(cand, best)) { best = cand; bestI = i; bestA = k - 1; bestB = k; }
       }
     }
     if (bestI < 0) return false;
     const s = state.strokes[bestI], total = s.pts.length - 1;
-    const cs = crossingsFor(bestI, state.strokes);
+    // Crossings arrive DUPLICATED: a vertical stroke is many small segments, and the
+    // crossing lands in two of them (or the segment end is shared by two segments), so
+    // crossingsFor reports the same point twice. Dedupe by position, or the bracket
+    // reads the same crossing as both `before` and `after`.
+    const cs = [];
+    for (const c of crossingsFor(bestI, state.strokes)) {
+      if (!cs.some(o => Math.abs(o.t - c.t) < 1e-6)) cs.push(c);
+    }
+    cs.sort((a, b) => a.t - b.t);
     // An isolated line has no crossings. The tap still means "erase here": a self-cut
     // at the tap point, so the two halves survive separately. No crossings at all is
     // a different thing from "nothing to do" -- the MVP must never answer with silence.
     const selfCut = cs.length === 0;
     // Parameter of the tap along the whole stroke.
-    const a = s.pts[bestA], b = s.pts[bestB];
-    const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
-    let lt = ((x - a[0]) * dx + (y - a[1]) * dy) / l2;
+    const ta = s.pts[bestA], tb = s.pts[bestB];
+    const dx = tb[0] - ta[0], dy = tb[1] - ta[1], l2 = dx * dx + dy * dy || 1;
+    let lt = ((x - ta[0]) * dx + (y - ta[1]) * dy) / l2;
     lt = Math.max(0, Math.min(1, lt));
     const tapT = (bestA + lt) / total;
     // Crossings bracketing the tap. `before` = last crossing at/left of the tap, `after` = first one past it.
     let before = -1e9, after = 1e9;
-    for (const c of cs) { if (c.t <= tapT && c.t > before) before = c.t; }
-    for (const c of cs) { if (c.t > tapT && c.t < after) after = c.t; }
-    // A crossing that sits ON the tap is not a useful bracket -- drop the degenerate case
-    // where `before` and `after` collapse onto the same point.
-    const TAP_EPS = 1e-4;
-    if (before > -1e9 && tapT - before < TAP_EPS) before = -1e9;
-    if (after < 1e9 && after - tapT < TAP_EPS) after = 1e9;
+    for (const c of cs) { if (c.t < tapT && c.t > before) before = c.t; }
+    for (const c of cs) { if (c.t >= tapT && c.t < after) after = c.t; }
+    // A crossing that sits ON the tap cannot bound the region: a region ending AT the
+    // junction puts the deleted gap on the wrong side. So the region is the OTHER side of
+    // that junction -- the piece between this crossing and the next one outward. That is
+    // what the eye means by touching a junction: "this gap" (Gibson: the invariant is the
+    // crossing, and the thing between two crossings is the piece).
+    // No crossing outward -> the piece runs to the end of the line (never silence).
+    const TAP_EPS = 1e-6;
+    const onBefore = before > -1e9 && tapT - before < TAP_EPS;
+    const onAfter = after < 1e9 && after - tapT < TAP_EPS;
+    if (onBefore || onAfter) {
+      const j = onBefore ? before : after;
+      // Tap on the junction: the cut starts AT the junction and runs to the next crossing
+      // beyond it. With nothing beyond, it runs to the end of that side.
+      before = j;
+      after = nextCrossing(cs, j, +1);
+      if (after >= 1e9) { before = nextCrossing(cs, j, -1); after = j; }
+    }
     const hasBefore = before > -1e9, hasAfter = after < 1e9;
 
     // Erase to intersection: kill the segment under the tap, stop at the nearest crossing
@@ -529,10 +633,12 @@
     // hand that case to the split primitive instead of a zero-width delete.
     if (selfCut) {
       const pieces = splitPointsAt(s.pts, tapT);
-      if (!pieces) { flash('Too close to the end'); return false; }
+      // Never answer with silence, and never leave the tool in a half-state: a tap too near
+      // an end says so and leaves the drawing untouched.
+      if (!pieces) { erasing = false; erasedAny = false; flash('Too close to the end'); return false; }
       // SEG_EPS leaves a sub-pixel gap between the halves; widen it so the cut LOOKS cut
       // at 1:1, then store the halves without the gap.
-      const gap = Math.max(SEG_EPS * 2, state.size * 0.75), total = s.pts.length - 1;
+      const gap = Math.max(SEG_EPS * 2, state.size * 0.75), n = s.pts.length - 1;
       const head = pieces[0].slice(), tail = pieces[1].slice();
       const h = head[head.length - 1], t0 = tail[0];
       const L = Math.hypot(t0[0] - h[0], t0[1] - h[1]) || 1;
@@ -541,14 +647,26 @@
       tail[0] = [t0[0] + ux * gap, t0[1] + uy * gap, t0[2]];
       s.pts = head;
       state.strokes.splice(bestI + 1, 0, { tool: s.tool, color: s.color, size: s.size, pts: tail });
-      pushHistory(); redrawAll(); flash('Cut line in two');
+      redrawAll(); flash('Cut line in two');
       return true;
     }
     const fromT = hasBefore ? before : 0;
     const toT = hasAfter ? after : 1;
 
+    // GUARD -- never silence (criterion 4 of the grammar). If fromT/toT still span the
+    // WHOLE stroke, deleteRegion refuses and the tap would answer with nothing. That can
+    // only happen when the cut would take everything, so take the SHORTER side: the smaller
+    // loss, and one Undo away.
+    if (fromT <= 1e-9 && toT >= 1 - 1e-9) {
+      const j = cs.length ? cs[0].t : tapT;
+      const [lo, hi] = j <= 0.5 ? [0, j] : [j, 1];
+      const okCut = deleteRegion(bestI, lo, hi);
+      if (okCut) { redrawAll(); flash('Erased to intersection'); }
+      return okCut;
+    }
+
     const removed = deleteRegion(bestI, fromT, toT);
-    if (removed) { pushHistory(); redrawAll(); flash('Erased to intersection'); }
+    if (removed) { redrawAll(); flash('Erased to intersection'); }
     return removed;
   }
 
@@ -585,7 +703,7 @@
   document.getElementById('toolEraser').onclick = () => setTool('eraser');
   document.getElementById('toolStrokeEraser').onclick = () => setTool('strokeEraser');
   // Build version -- visible so "is this the version I tested?" has an answer.
-  const APP_VERSION = '0.2.0';
+  const APP_VERSION = '0.2.2';
   (function stampVersion() {
     const el = document.getElementById('appVer');
     if (el) el.textContent = 'v' + APP_VERSION;
