@@ -35,15 +35,20 @@ A PR that adds a network call is rejected, however small.
 | **No build step.** Edit, refresh. | If you need a compiler to test a change, the change is wrong. |
 | **Pressure matters.** Test with a stylus when you can. | Tapered lines are the product, not a detail. |
 
-## Storage keys are frozen
+## Storage keys
 
-`index.html` uses `offline-sketch-v1` and `vault.html` uses `dillon-vault`.
-**Neither is renamed.** The comment says it: renaming orphans saved drawings.
-A user with a canvas full of work would open the app and find it empty.
+| File | Key | Status |
+|---|---|---|
+| `index.html` | `offline-sketch-v1` | unchanged — carries no brand, nothing to migrate |
+| `vault.html` | `illo-vault` | migrated from `dillon-vault` on load (read old, write new, drop old) |
 
-Renaming a storage key is a **migration**, not a rename: read the old key, write
-the new one, keep the old one for one release. That is its own decision and its own
-commit. Do not fold it into a cosmetic rename.
+**Never rename a storage key without migrating.** A bare rename orphans saved
+drawings: the user opens the app and finds it empty. The migration is five lines in
+`vault.html` — read the legacy key when the current one is absent, write it under the
+current key, remove the legacy key. Copy that shape if another key ever moves.
+
+Do not fold a storage-key migration into a cosmetic rename. It is its own change,
+tested on its own, because it touches user data.
 
 This is the same defect class as renaming an OpenClaw agent without rewriting its
 session pointers: the system keeps working and silently loses the user's data.
