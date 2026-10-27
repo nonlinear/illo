@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Dillon — a private, offline drawing app in a single HTML file</title>
-<meta name="description" content="Dillon — a private, offline drawing app in one HTML file. Draw with a pressure-sensitive pen (Apple Pencil, Wacom, iPad). No account, no server, no tracking — your drawings never leave your browser.">
+<title>Illo — a private, offline drawing app in a single HTML file</title>
+<meta name="description" content="Illo — a private, offline drawing app in one HTML file. Draw with a pressure-sensitive pen (Apple Pencil, Wacom, iPad). No account, no server, no tracking — your drawings never leave your browser.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#7C3AED">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Dillon — a private, offline drawing app">
+<meta property="og:title" content="Illo — a private, offline drawing app">
 <meta property="og:description" content="One HTML file. Draw with a pressure-sensitive stylus, fully offline. No account, no server, no tracking. Free & open source.">
 <meta property="og:image" content="screenshot.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -122,7 +122,7 @@
       <span class="logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none"><path d="M3.5 16.5c3-1 4-7 6.5-7s2 5 4.5 5 3-5 6-5.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="9" r="2" fill="#FACC15"/></svg>
       </span>
-      <span><span class="name">Dillon</span><span class="sub">drawing · <span class="by">by NoCodeWork ↗</span></span></span>
+      <span><span class="name">Illo</span><span class="sub">drawing · <span class="by">by NoCodeWork ↗</span></span></span>
     </a>
     <div class="actions panel">
       <button class="btn icon" id="btnUndo" title="Undo (⌘Z)" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
@@ -190,7 +190,7 @@
 "use strict";
 (function () {
   // =====================================================================
-  //  Dillon — a private, offline drawing app (single HTML file).
+  //  Illo — a private, offline drawing app (single HTML file).
   //  Pressure-sensitive strokes via Pointer Events (e.pressure + coalesced
   //  events for stylus fidelity). Strokes are kept as point lists so we can
   //  undo, redo, resize, export and persist them. Everything is local.
@@ -715,7 +715,7 @@
   (function stampVersion() {
     const el = document.getElementById('appVer');
     if (el) el.textContent = 'v' + APP_VERSION;
-    document.title = 'Dillon · v' + APP_VERSION;
+    document.title = 'Illo · v' + APP_VERSION;
   })();
   document.getElementById('toolPan').onclick = () => setTool('pan');
   document.getElementById('zoomIn').onclick = () => { zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1.2); redrawAll(); scheduleSave(); };
@@ -824,7 +824,7 @@
     if (pts.length === 1) seg(pts[0], pts[0]); else for (let i = 1; i < pts.length; i++) seg(pts[i - 1], pts[i]);
   }
   function exportJSON() {
-    const data = JSON.stringify({ app: 'dillon', version: 1, strokes: state.strokes });
+    const data = JSON.stringify({ app: 'illo', version: 1, strokes: state.strokes });
     download(new Blob([data], { type: 'application/json' }), 'sketch.json');
   }
   document.getElementById('btnPng').onclick = exportPNG;
@@ -926,7 +926,7 @@
 
   function uid() { return 's' + Math.random().toString(36).slice(2, 10); }
 
-  // state.strokes (Dillon) -> {format,version,canvas,layers[].strokes[]}
+  // state.strokes (Illo) -> {format,version,canvas,layers[].strokes[]}
   function stateToIllo() {
     const strokes = state.strokes.filter(s => !s._welcome).map(s => ({
       id: s.id || uid(),
@@ -940,7 +940,7 @@
       version: ILLO_VERSION,
       canvas: { width: Math.max(1, Math.round(window.innerWidth || 2000)), height: Math.max(1, Math.round(window.innerHeight || 2000)) },
       layers: [{ id: 'layer-1', name: 'Ink', strokes }],
-      meta: { createdBy: 'dillon', exportedAt: new Date().toISOString() },
+      meta: { createdBy: 'illo', exportedAt: new Date().toISOString() },
     };
   }
 

@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#FBFBF9">
 <link rel="manifest" href="/manifest.webmanifest">
-<title>Dillon — vault</title>
+<title>Illo — vault</title>
 <style>
   :root { --bg:#FBFBF9; --ink:#18181B; --faint:#B4B4AC; --line:#E4E4DE; --panel:#fff; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -76,7 +76,7 @@
 <script>
 "use strict";
 // ============================================================================
-// Dillon — M0+, "vault"
+// Illo — M0+, "vault"
 //
 //   THE QUESTION: can you draw straight in the browser? Does pressure + velocity
 //   come through, and can BRUSHES be swapped to manifest the same stroke
@@ -99,7 +99,7 @@ const statsEl = document.getElementById('stats');
 const hintEl = document.getElementById('hint');
 const metaEl = document.getElementById('meta');
 
-const STORE = 'dillon-vault';
+const STORE = 'dillon-vault';   // kept on purpose: renaming orphans saved vaults (migration is its own decision)
 const FILE_NAME = 'illo.json';
 const API = '/api';              // same-origin; works from the local server only
 

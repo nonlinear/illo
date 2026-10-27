@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="illo-icon.svg" width="76" alt="Dillon">
+<img src="illo-icon.svg" width="76" alt="Illo">
 
-# Dillon
+# Illo
 
 A drawing app that's just one HTML file. Open it and draw — with a pressure-sensitive pen if you have one (Apple Pencil, Wacom, an iPad). No signup, no install, and nothing leaves your browser.
 
@@ -12,15 +12,15 @@ A drawing app that's just one HTML file. Open it and draw — with a pressure-se
 ![network requests: 0](https://img.shields.io/badge/network%20requests-0-22C55E)
 ![vanilla JS](https://img.shields.io/badge/vanilla-JS-EAB308)
 
-**[Open the live demo](https://nocodework.github.io/Dillon/)** and draw something, or [download `index.html`](https://raw.githubusercontent.com/nocodework/Dillon/main/index.html) and open it on any machine, even one with no internet.
+**[Open the live demo](https://nocodework.github.io/illo/)** and draw something, or [download `index.html`](https://raw.githubusercontent.com/nocodework/illo/main/index.html) and open it on any machine, even one with no internet.
 
-![Dillon screenshot](screenshot.png)
+![Illo screenshot](screenshot.png)
 
 </div>
 
 ## The idea
 
-Sometimes you just want to scribble an idea — on a tablet with a stylus, or with a mouse — without opening a heavy app or signing into anything. Dillon is a sketchpad in a single file. You open it and draw. Strokes are pressure-sensitive when you use a pen, so lines taper like the real thing.
+Sometimes you just want to scribble an idea — on a tablet with a stylus, or with a mouse — without opening a heavy app or signing into anything. Illo is a sketchpad in a single file. You open it and draw. Strokes are pressure-sensitive when you use a pen, so lines taper like the real thing.
 
 Everything is saved in this browser and never sent anywhere. Open the Network tab and reload if you want to check: the only thing that loads is the page itself.
 
@@ -37,12 +37,12 @@ Because the drawing lives in your browser, it's tied to that browser on that mac
 
 ## Using it
 
-Open the [live demo](https://nocodework.github.io/Dillon/) and draw. To use it offline, download `index.html` and double-click it. It's a static file, so you can keep it on a USB stick, drop it on any web host, or `git clone` and open it.
+Open the [live demo](https://nocodework.github.io/illo/) and draw. To use it offline, download `index.html` and double-click it. It's a static file, so you can keep it on a USB stick, drop it on any web host, or `git clone` and open it.
 
 Grab the file from a terminal (this also works inside Claude Code or Codex):
 
 ```bash
-curl -O https://raw.githubusercontent.com/nocodework/Dillon/main/index.html
+curl -O https://raw.githubusercontent.com/nocodework/illo/main/index.html
 open index.html      # macOS  ·  Linux: xdg-open index.html  ·  Windows: start index.html
 ```
 
@@ -64,7 +64,7 @@ Plain JavaScript, no libraries. Drawing uses Pointer Events, including `getCoale
 
 ## How it compares
 
-|  | Dillon | Excalidraw | Procreate / native apps |
+|  | Illo | Excalidraw | Procreate / native apps |
 |---|:---:|:---:|:---:|
 | Works with no internet | yes | needs PWA install | yes |
 | No account, nothing to install | yes | mostly | needs install |
@@ -76,7 +76,7 @@ It's deliberately small: a sketchpad you can carry around in one file. For full 
 
 ## Part of the offline series
 
-Dillon is one of a small family of single-file, offline-first tools by NoCodeWork — one HTML file, no account, no server, works offline. The others:
+Illo is one of a small family of single-file, offline-first tools by NoCodeWork — one HTML file, no account, no server, works offline. The others:
 
 **[offline-whiteboard](https://github.com/nocodework/offline-whiteboard)** — sticky notes, shapes and arrows on an infinite canvas · [demo](https://nocodework.github.io/offline-whiteboard/)
 
