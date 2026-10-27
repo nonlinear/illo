@@ -12,7 +12,7 @@ A drawing app that's just one HTML file. Open it and draw — with a pressure-se
 ![network requests: 0](https://img.shields.io/badge/network%20requests-0-22C55E)
 ![vanilla JS](https://img.shields.io/badge/vanilla-JS-EAB308)
 
-**[Open the live demo](https://nocodework.github.io/illo/)** and draw something, or [download `index.html`](https://raw.githubusercontent.com/nocodework/illo/main/index.html) and open it on any machine, even one with no internet.
+**[Open the live demo](https://nonlinear.github.io/illo/)** and draw something, or [download `index.html`](https://raw.githubusercontent.com/nonlinear/illo/main/index.html) and open it on any machine, even one with no internet.
 
 ![Illo screenshot](screenshot.png)
 
@@ -37,12 +37,12 @@ Because the drawing lives in your browser, it's tied to that browser on that mac
 
 ## Using it
 
-Open the [live demo](https://nocodework.github.io/illo/) and draw. To use it offline, download `index.html` and double-click it. It's a static file, so you can keep it on a USB stick, drop it on any web host, or `git clone` and open it.
+Open the [live demo](https://nonlinear.github.io/illo/) and draw. To use it offline, download `index.html` and double-click it. It's a static file, so you can keep it on a USB stick, drop it on any web host, or `git clone` and open it.
 
 Grab the file from a terminal (this also works inside Claude Code or Codex):
 
 ```bash
-curl -O https://raw.githubusercontent.com/nocodework/illo/main/index.html
+curl -O https://raw.githubusercontent.com/nonlinear/illo/main/index.html
 open index.html      # macOS  ·  Linux: xdg-open index.html  ·  Windows: start index.html
 ```
 
