@@ -5,8 +5,17 @@ Instructions for any agent working in this repository.
 ## What this is
 
 **Illo** — a private, offline drawing app in **one HTML file**. No build, no
-dependencies, no network. Repo: `git.cyborg.support/nonlinear/illo`.
-Agent owner: `illo` (`~/.openclaw/agents/illo/`).
+dependencies, no network.
+
+| | |
+|---|---|
+| Local | `~/Documents/illo/` |
+| Public repo | `github.com/nonlinear/illo` |
+| Live demo | `nonlinear.github.io/illo/` |
+| Agent owner | `illo` (`~/.openclaw/agents/illo/`) |
+
+Because the repo is public and there is **no build step**, the file at the repo root
+*is* the deployed app. `git push` publishes.
 
 ## The one rule that shapes everything
 
