@@ -74,37 +74,12 @@ Plain JavaScript, no libraries. Drawing uses Pointer Events, including `getCoale
 
 It's deliberately small: a sketchpad you can carry around in one file. For full illustration or layers, a native app like Procreate will serve you better.
 
-## Part of the offline series
-
-Illo is one of a small family of single-file, offline-first tools by NoCodeWork — one HTML file, no account, no server, works offline. The others:
-
-**[offline-whiteboard](https://github.com/nocodework/offline-whiteboard)** — sticky notes, shapes and arrows on an infinite canvas · [demo](https://nocodework.github.io/offline-whiteboard/)
-
-[![offline-whiteboard](https://raw.githubusercontent.com/nocodework/offline-whiteboard/main/screenshot.png)](https://nocodework.github.io/offline-whiteboard/)
-
-**[offline-notes](https://github.com/nocodework/offline-notes)** — a Markdown editor that renders as you type · [demo](https://nocodework.github.io/offline-notes/)
-
-[![offline-notes](https://raw.githubusercontent.com/nocodework/offline-notes/main/screenshot.png)](https://nocodework.github.io/offline-notes/)
-
-## More open source from NoCodeWork
-
-- **[ai-context-kit](https://github.com/nocodework/ai-context-kit)** — give any AI tool durable context about you and your company
-- **[growth-os](https://github.com/nocodework/growth-os)** — an open Growth OS for any AI agent: audit a site's SEO, speed, GEO and competitors, then act
-
 ## Contributing
 
 Issues and pull requests are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). It's one file with no toolchain, so there's nothing to set up first.
 
 ## License
 
-[MIT](LICENSE), by [NoCodeWork](https://nocodework.io). Do whatever you want with it.
+[MIT](LICENSE). Do whatever you want with it.
 
 ---
-
-<div align="center">
-
-<a href="https://nocodework.io"><picture><source media="(prefers-color-scheme: dark)" srcset="nocodework-logo-white.png"><img src="nocodework-logo.png" alt="NoCodeWork" width="150"></picture></a>
-
-Built by <a href="https://nocodework.io">NoCodeWork</a>, where we build automation, AI and apps for companies.
-
-</div>
