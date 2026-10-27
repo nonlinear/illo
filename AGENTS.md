@@ -9,13 +9,13 @@ dependencies, no network.
 
 | | |
 |---|---|
-| Local | `~/Documents/illo/` |
-| Public repo | `github.com/nonlinear/illo` |
-| Live demo | `nonlinear.github.io/illo/` |
+| Local | `~/Documents/illo` |
+| Repo | `github.com/nonlinear/illo` · repo `illo` · user `nonlinear` |
 | Agent owner | `illo` (`~/.openclaw/agents/illo/`) |
 
-Because the repo is public and there is **no build step**, the file at the repo root
-*is* the deployed app. `git push` publishes.
+There is **no build step and no Pages deployment**. The repo is the source of truth;
+`index.html` at the root *is* the app. To use it, take the file — that is the whole
+product. GitHub Pages is not used for this project.
 
 ## The one rule that shapes everything
 
