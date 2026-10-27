@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="icon.svg" width="76" alt="Dillon">
+<img src="illo-icon.svg" width="76" alt="Dillon">
 
 # Dillon
 
