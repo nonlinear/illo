@@ -99,7 +99,8 @@ const statsEl = document.getElementById('stats');
 const hintEl = document.getElementById('hint');
 const metaEl = document.getElementById('meta');
 
-const STORE = 'dillon-vault';   // kept on purpose: renaming orphans saved vaults (migration is its own decision)
+const STORE = 'illo-vault';
+const STORE_LEGACY = 'dillon-vault';   // read once, then rewritten under the new key
 const FILE_NAME = 'illo.json';
 const API = '/api';              // same-origin; works from the local server only
 
@@ -735,7 +736,15 @@ function adopt(d) {
 }
 
 function restore() {
-  const raw = localStorage.getItem(STORE);
+  let raw = localStorage.getItem(STORE);
+  if (raw == null) {
+    const legacy = localStorage.getItem(STORE_LEGACY);
+    if (legacy != null) {
+      // migrate once: keep the user's vault, move it to the current key
+      raw = legacy;
+      try { localStorage.setItem(STORE, legacy); localStorage.removeItem(STORE_LEGACY); } catch (_) {}
+    }
+  }
   if (!raw) return false;
   try { adopt(JSON.parse(raw)); return strokes.length > 0; } catch (_) { return false; }
 }
