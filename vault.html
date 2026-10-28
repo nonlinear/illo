@@ -449,29 +449,30 @@ async function connectServer() {
   // file:// has no origin server; skip cleanly instead of throwing in console.
   if (location.protocol === 'file:') { syncState = 'local'; paintSync(); return; }
   try {
-    // reuse the last page id for this browser so a reload continues the same page
-    let id = localStorage.getItem('illo-page');
+    // MVP: one page. The server decides which -- the client does not pick, and
+    // does not remember an id. A single drawing that anyone can open and draw
+    // on is the whole product here; pages are a later decision, not this one.
     const res = await fetch(API + '/page', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(id ? { id } : {}),
+      body: '{}',
     });
     if (!res.ok) throw new Error('http ' + res.status);
     const meta = await res.json();
     PAGE = meta.id;
-    localStorage.setItem('illo-page', PAGE);
-    // The server may already have strokes (reload, other device). Adopt them
-    // only when the local canvas is empty, so we never clobber unsent ink.
-    if (!strokes.length && (meta.strokes || 0) > 0) {
+    // The server is the document. Adopt what it has, unless this tab already
+    // drew ink that has not been sent yet -- unsent ink always wins.
+    const unsent = outbox.length;
+    if (!unsent && (meta.strokes || 0) > 0) {
       const r = await fetch(API + '/page/' + encodeURIComponent(PAGE));
       if (r.ok) {
         const doc = await r.json();
         adopt({ strokes: (doc.strokes || []).map(s => ({ id: s.id, points: s.pts })) });
-        markBrush(); redraw();
-        flash('resumed ' + (doc.strokes || []).length + ' strokes from page ' + PAGE);
+        markBrush(); redraw(); paintMeta();
       }
     }
-    syncState = 'synced'; paintSync(); paintMeta();
+    syncState = outbox.length ? 'syncing' : 'synced'; paintSync(); paintMeta();
+    if (outbox.length) scheduleSend(0);
   } catch (_) {
     PAGE = null;
     syncState = 'local'; paintSync();

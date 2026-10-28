@@ -1,0 +1,67 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>pen probe</title>
+<style>html,body{margin:0;height:100%;background:#fff;overflow:hidden;font:13px/1.4 monospace}
+canvas{display:block;touch-action:none}
+#log{position:fixed;left:8px;bottom:8px;right:8px;max-height:46%;overflow:auto;background:rgba(255,255,255,.95);
+border:1px solid #ccc;border-radius:8px;padding:8px;white-space:pre;font-size:11px}</style></head>
+<body><canvas id="c"></canvas><div id="log">touch the screen with anything. reads every pointer type.\n</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d'),log=document.getElementById('log');
+let dpr=devicePixelRatio||1;
+function rs(){dpr=devicePixelRatio||1;c.width=innerWidth*dpr;c.height=innerHeight*dpr;
+c.style.width=innerWidth+'px';c.style.height=innerHeight+'px';}
+rs();addEventListener('resize',rs);
+const S={};
+function rec(e){
+  const k=e.pointerType||'?';
+  (S[k]=S[k]||{n:0,p:[],w:[],h:[],tiltX:[],tiltY:[],twist:[],coal:[],dt:[]});
+  const s=S[k];s.n++;
+  if(typeof e.pressure==='number')s.p.push(e.pressure);
+  if(typeof e.width==='number')s.w.push(e.width);
+  if(typeof e.height==='number')s.h.push(e.height);
+  if(typeof e.tiltX==='number')s.tiltX.push(e.tiltX);
+  if(typeof e.tiltY==='number')s.tiltY.push(e.tiltY);
+  if(typeof e.twist==='number')s.twist.push(e.twist);
+  s.coal.push(e.getCoalescedEvents?e.getCoalescedEvents().length:0);
+}
+let pts=[],active=null,last=0;
+c.addEventListener('pointerdown',e=>{e.preventDefault();active=e.pointerId;pts=[];last=0;rec(e);});
+c.addEventListener('pointermove',e=>{
+  if(e.pointerId!==active)return;e.preventDefault();
+  const list=e.getCoalescedEvents?e.getCoalescedEvents():[e];
+  for(const ev of (list.length?list:[e])){rec(ev);
+    const now=ev.timeStamp||performance.now();
+    if(last)S[e.pointerType].dt.push(now-last);
+    last=now;
+    pts.push([ev.clientX,ev.clientY,ev.pressure||0]);
+    ctx.fillStyle='#111';ctx.beginPath();
+    ctx.arc(ev.clientX,ev.clientY,Math.max(.4,0.5+(ev.pressure||0)*6),0,7);ctx.fill();
+  }
+});
+c.addEventListener('pointerup',e=>{active=null;flush();});
+c.addEventListener('pointercancel',e=>{active=null;flush();});
+function stat(a){if(!a||!a.length)return '—';
+ const lo=Math.min(...a),hi=Math.max(...a),avg=a.reduce((x,y)=>x+y,0)/a.length;
+ return `${lo.toFixed(3)}..${hi.toFixed(3)} avg ${avg.toFixed(3)}`;
+}
+function flush(){
+  let out='';
+  for(const k of Object.keys(S)){
+    const s=S[k];
+    out+=`── ${k.toUpperCase()} (${s.n} samples)\n`;
+    out+=`   pressure   ${stat(s.p)}\n`;
+    out+=`   width      ${stat(s.w)}\n`;
+    out+=`   height     ${stat(s.h)}\n`;
+    out+=`   tiltX      ${stat(s.tiltX)}\n`;
+    out+=`   tiltY      ${stat(s.tiltY)}\n`;
+    out+=`   twist      ${stat(s.twist)}\n`;
+    out+=`   coalesced  ${stat(s.coal)}\n`;
+    out+=`   dt ms      ${stat(s.dt)}\n`;
+    const uniq=new Set(s.p.map(v=>v.toFixed(3))).size;
+    out+=`   distinct pressure values: ${uniq}\n`;
+  }
+  log.textContent=out;
+  window.__probe=JSON.parse(JSON.stringify(S));
+}
+</script></body></html>

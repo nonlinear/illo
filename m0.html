@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>illo</title>
+<meta name="description" content="illo — M0. One file. One stroke. Pressure-sensitive.">
+<style>
+  :root { --bg:#FBFBF9; --ink:#18181B; --faint:#C8C8C2; --shadow:0 1px 3px rgba(0,0,0,.12); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); overscroll-behavior:none; }
+  canvas { display:block; touch-action:none; cursor:crosshair; }
+  #zoom { position:fixed; left:14px; bottom:14px; font:12px/1 ui-monospace,monospace;
+          color:var(--faint); background:rgba(255,255,255,.85); padding:6px 9px;
+          border-radius:8px; box-shadow:var(--shadow); user-select:none; }
+  #hint { position:fixed; left:50%; top:14px; transform:translateX(-50%);
+          font:12px/1.3 -apple-system,system-ui,sans-serif; color:#8A8A82;
+          background:rgba(255,255,255,.9); padding:7px 13px; border-radius:9px;
+          box-shadow:var(--shadow); pointer-events:none; opacity:0; transition:opacity .25s; }
+  #hint.show { opacity:1; }
+</style>
+</head>
+<body>
+<canvas id="pad"></canvas>
+<div id="zoom">1×</div>
+<div id="hint"></div>
+
+<script>
+"use strict";
+// ============================================================================
+// illo — M0 (walking skeleton)
+//
+//   ONE file. ONE stroke in memory. ONE file on disk.
+//   No vault, no folders, no repo, no layers, no eraser, no colors, no zoom UI.
+//   The only thing that matters: does the pen's PRESSURE reach the line, and
+//   does the line survive a save → reload round trip?
+//
+//   File: illo.json (download / upload). One blob, overwritten each save.
+//   Auto-restore: localStorage mirrors the last save so a reload never loses ink.
+// ============================================================================
+
+const canvas = document.getElementById('pad');
+const ctx = canvas.getContext('2d');
+const zoomLbl = document.getElementById('zoom');
+const hintEl = document.getElementById('hint');
+
+const STORE = 'illo-m0';          // localStorage autosave
+const FILE_NAME = 'illo.json';    // the one file
+const SIZE = 6;                   // the one brush size (px at pressure 1)
+
+let dpr = Math.max(1, window.devicePixelRatio || 1);
+let strokes = [];                 // [{ id, pts: [[x, y, pressure], ...] }]
+let drawing = null;
+let activeId = null;
+let camera = { x: 0, y: 0, zoom: 1 };
+
+// ---------------------------------------------------------------- rendering --
+function resize() {
+  dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  redraw();
+}
+
+// pressure → radius. min 0.05 guarantees a visible dot for light touches.
+function radius(p) { return (SIZE / 2) * (0.35 + 0.65 * clampP(p)); }
+function clampP(p) { return Math.max(0.05, Math.min(1, p)); }
+
+// One continuous variable-width ribbon: walk the segment, stamp discs.
+// Round caps come free (it's discs all the way).
+function segment(a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dist = Math.hypot(dx, dy);
+  const r0 = radius(a[2]), r1 = radius(b[2]);
+  const step = Math.max(0.6, Math.min(r0, r1) * 0.35);
+  const n = Math.max(1, Math.ceil(dist / step));
+  ctx.fillStyle = '#18181B';
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    ctx.beginPath();
+    ctx.arc(a[0] + dx * t, a[1] + dy * t, Math.max(0.4, r0 + (r1 - r0) * t), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawStroke(s) {
+  if (s.pts.length === 1) { segment(s.pts[0], s.pts[0]); return; }
+  for (let i = 1; i < s.pts.length; i++) segment(s.pts[i - 1], s.pts[i]);
+}
+
+function redraw() {
+  ctx.setTransform(camera.zoom * dpr, 0, 0, camera.zoom * dpr, camera.x * dpr, camera.y * dpr);
+  ctx.clearRect(-1e6, -1e6, 2e6, 2e6);
+  for (const s of strokes) drawStroke(s);
+}
+
+// -------------------------------------------------------------------- input --
+function point(e) {
+  const r = canvas.getBoundingClientRect();
+  // pen: real pressure. mouse/touch: no pressure info → full (0.5 would look
+  // apologetic; 1 keeps the stroke at nominal size and makes the difference
+  // between pen and finger immediately legible).
+  const raw = e.pointerType === 'pen' ? e.pressure : 1;
+  const x = (e.clientX - r.left - camera.x) / camera.zoom;
+  const y = (e.clientY - r.top - camera.y) / camera.zoom;
+  return [+x.toFixed(2), +y.toFixed(2), +clampP(raw).toFixed(3)];
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (activeId !== null) return;                       // one pointer at a time
+  e.preventDefault();
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  activeId = e.pointerId;
+  hintEl.classList.remove('show');
+  drawing = { id: uid(), pts: [point(e)] };
+  drawStroke(drawing);                                  // dot on tap
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== activeId || !drawing) return;
+  e.preventDefault();
+  // Coalesced events: the OS batches high-frequency pen samples; without this
+  // the stroke loses the fast parts of the gesture AND the pressure detail.
+  const list = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  const evs = list.length ? list : [e];
+  for (const ev of evs) {
+    const p = point(ev);
+    const last = drawing.pts[drawing.pts.length - 1];
+    if (last && p[0] === last[0] && p[1] === last[1]) continue;
+    drawing.pts.push(p);
+    segment(last, p);
+  }
+});
+
+function endStroke(e) {
+  if (e.pointerId !== activeId) return;
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  activeId = null;
+  if (drawing && drawing.pts.length) {
+    strokes.push(drawing);
+    logPressure(drawing);
+    persist();
+  }
+  drawing = null;
+}
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+
+// ------------------------------------------------------------------- persist --
+function uid() { return 's' + Math.random().toString(36).slice(2, 10); }
+
+function document_() {
+  return {
+    format: 'illo',
+    version: '0.1-m0',
+    canvas: { width: Math.max(1, Math.round(innerWidth)), height: Math.max(1, Math.round(innerHeight)) },
+    strokes: strokes.map(s => ({ id: s.id, points: s.pts })),
+  };
+}
+
+let saveTimer = null;
+function persist() {                       // localStorage mirror (reload-safe)
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE, JSON.stringify(document_())); }
+    catch (_) { flash('Could not autosave (storage full)'); }
+  }, 300);
+}
+
+function restore() {
+  const raw = localStorage.getItem(STORE);
+  if (!raw) return false;
+  try {
+    const d = JSON.parse(raw);
+    strokes = (d.strokes || []).map(s => ({
+      id: s.id || uid(),
+      pts: (s.points || []).filter(p => Array.isArray(p) && p.length >= 2)
+                            .map(p => [+p[0], +p[1], +clampP(+p[2] || 1)]),
+    })).filter(s => s.pts.length);
+    return strokes.length > 0;
+  } catch (_) { return false; }
+}
+
+// ---------------------------------------------------------------- the file --
+// Save = one JSON blob downloaded as illo.json (overwrites on the user's disk).
+// Load = pick that file back. That's the whole persistence model for M0.
+function saveFile() {
+  const text = JSON.stringify(document_(), null, 2);
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = FILE_NAME;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  flash('saved → ' + FILE_NAME);
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    let d;
+    try { d = JSON.parse(r.result); }
+    catch (err) { flash('not JSON: ' + err.message); return; }
+    if (!d || d.format !== 'illo' || !Array.isArray(d.strokes)) { flash('not an .illo file'); return; }
+    strokes = d.strokes.map(s => ({
+      id: s.id || uid(),
+      pts: (s.points || []).filter(p => Array.isArray(p) && p.length >= 2)
+                            .map(p => [+p[0], +p[1], +clampP(+p[2] || 1)]),
+    })).filter(s => s.pts.length);
+    redraw();
+    persist();
+    flash('loaded ' + strokes.length + ' stroke' + (strokes.length === 1 ? '' : 's'));
+  };
+  r.onerror = () => flash('could not read file');
+  r.readAsText(file);
+}
+
+// ------------------------------------------------------------------ the UI --
+// Deliberately four things: save, load, undo, zoom-to-fit. Nothing else.
+const bar = document.createElement('div');
+bar.style.cssText = 'position:fixed;right:14px;bottom:14px;display:flex;gap:6px;align-items:center';
+function mkBtn(label, title, fn) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.title = title;
+  b.style.cssText = 'font:12px/1 -apple-system,system-ui,sans-serif;padding:9px 12px;border:0;' +
+    'border-radius:8px;background:#fff;color:#18181B;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:pointer';
+  b.onclick = fn;
+  bar.appendChild(b);
+  return b;
+}
+mkBtn('save', 'Save illo.json', saveFile);
+const loadInput = document.createElement('input');
+loadInput.type = 'file'; loadInput.accept = '.json,application/json';
+loadInput.style.display = 'none';
+loadInput.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; loadFile(f); };
+document.body.appendChild(loadInput);
+mkBtn('load', 'Load a saved illo.json', () => loadInput.click());
+mkBtn('undo', 'Remove the last stroke', () => {
+  if (!strokes.length) { flash('nothing to undo'); return; }
+  strokes.pop(); redraw(); persist(); flash('stroke removed');
+});
+mkBtn('fit', 'Zoom to fit', () => {
+  if (!strokes.length) { camera = { x: 0, y: 0, zoom: 1 }; redraw(); return; }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of strokes) for (const p of s.pts) {
+    const r = SIZE / 2 + 2;
+    minX = Math.min(minX, p[0] - r); minY = Math.min(minY, p[1] - r);
+    maxX = Math.max(maxX, p[0] + r); maxY = Math.max(maxY, p[1] + r);
+  }
+  const pad = 40, w = maxX - minX + pad * 2, h = maxY - minY + pad * 2;
+  const z = Math.min(innerWidth / w, innerHeight / h, 4);
+  camera.zoom = z;
+  camera.x = innerWidth / 2 - (minX + (maxX - minX) / 2) * z;
+  camera.y = innerHeight / 2 - (minY + (maxY - minY) / 2) * z;
+  redraw(); showZoom();
+});
+document.body.appendChild(bar);
+
+// Pinch / wheel zoom. Minimal: no pan tool, no zoom buttons — the canvas is
+// the whole window and a two-finger pinch is enough to get close to a line.
+const pointers = new Map();
+let gesture = null;
+function gMetrics() {
+  const v = [...pointers.values()], a = v[0], b = v[1];
+  return { mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1 };
+}
+canvas.addEventListener('pointerdown', (e) => {
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pointers.size === 2) { drawing = null; activeId = null; gesture = gMetrics(); }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (!gesture || pointers.size < 2) return;
+  const m = gMetrics();
+  camera.x += m.mx - gesture.mx;
+  camera.y += m.my - gesture.my;
+  const f = m.d / gesture.d;
+  camera.zoom = Math.max(0.1, Math.min(8, camera.zoom * f));
+  camera.x = m.mx - (m.mx - camera.x) * f;
+  camera.y = m.my - (m.my - camera.y) * f;
+  gesture = { mx: m.mx, my: m.my, d: m.d };
+  redraw(); showZoom();
+});
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * 0.0015);
+  camera.zoom = Math.max(0.1, Math.min(8, camera.zoom * f));
+  camera.x = e.clientX - (e.clientX - camera.x) * f;
+  camera.y = e.clientY - (e.clientY - camera.y) * f;
+  redraw(); showZoom();
+}, { passive: false });
+['pointerup', 'pointercancel'].forEach(ev => canvas.addEventListener(ev, (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) gesture = null;
+}));
+
+// ------------------------------------------------------------------- status --
+function showZoom() { zoomLbl.textContent = Math.round(camera.zoom * 100) + '%'; }
+let flashTimer = null;
+function flash(msg) {
+  hintEl.textContent = msg;
+  hintEl.classList.add('show');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => hintEl.classList.remove('show'), 1700);
+}
+
+// Pressure evidence: print the observed range of the stroke we just finished.
+// This is the M0 acceptance test made visible — no devtools needed.
+function logPressure(s) {
+  let lo = 1, hi = 0;
+  for (const p of s.pts) { lo = Math.min(lo, p[2]); hi = Math.max(hi, p[2]); }
+  const n = s.pts.length;
+  console.log(`[illo] stroke ${s.id}: ${n} pts, pressure ${lo.toFixed(2)}–${hi.toFixed(2)}`);
+  if (n > 8 && hi - lo < 0.02) flash('pressure flat (' + lo.toFixed(2) + ') — is it a stylus?');
+}
+
+// --------------------------------------------------------------------- boot --
+addEventListener('resize', resize);
+addEventListener('beforeunload', () => { try { localStorage.setItem(STORE, JSON.stringify(document_())); } catch (_) {} });
+
+const had = restore();
+resize();
+showZoom();
+if (!had) {
+  hintEl.textContent = 'draw — pressure is recorded';
+  hintEl.classList.add('show');
+  setTimeout(() => hintEl.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>
