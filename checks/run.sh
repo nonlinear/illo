@@ -48,7 +48,7 @@ harness_changed=0
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   case "$f" in
-    index.html|vault.html)
+    index.html)
       case " $APP_LIST " in *" app "*) ;; *) APP_LIST="$APP_LIST app" ;; esac ;;
     manifest.webmanifest|icon-*.png|apple-touch-icon.png|illo-icon.svg|illo-icon.png)
       case " $APP_LIST " in *" pwa "*) ;; *) APP_LIST="$APP_LIST pwa" ;; esac ;;
