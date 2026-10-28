@@ -273,7 +273,7 @@
     // Placed BEFORE setPointerCapture: capture on a non-pen would leave the mouse
     // holding the pointer, and every later pointermove would be retargeted to canvas.
     const gatesInk = !(e.button === 1 || spaceHeld || state.tool === 'pan');
-    if (gatesInk && e.pointerType !== 'pen') { flash('Draw with a pen. Mouse and finger pan, zoom and erase.'); return; }
+    if (gatesInk && e.pointerType !== 'pen') { return; }
     e.preventDefault();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     activeId = e.pointerId; activeType = e.pointerType;
