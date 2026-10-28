@@ -10,3 +10,4 @@
 # server state: the drawing lives here, not in the repo.
 # Append-only JSONL, one file per page. Backed up separately.
 server/data/
+checks/checkpoints/
