@@ -74,26 +74,13 @@
   .tool .kbd { position: absolute; bottom: 2px; right: 4px; font-size: 10px; font-weight: 600; color: var(--muted); }
   .tool.active .kbd { color: var(--primary); }
   .dock .divider { width: 26px; height: 1px; background: var(--border); margin: 2px 0; }
+  /* the size dot doubles as the read-out: no slider, no popover */
+  .tool .dot { display: block; background: currentColor; border-radius: 50%; }
 
   .swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; }
   .swatch:hover { transform: scale(1.12); }
   .swatch.sel { box-shadow: 0 0 0 2px var(--primary); }
-
-  .size-pop { position: fixed; left: 64px; top: 50%; transform: translateY(-50%); z-index: 11; padding: 14px 16px; width: 190px; }
-  .size-pop label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 8px; }
-  .size-pop input[type=range] { width: 100%; accent-color: var(--primary); }
-  .size-preview { height: 44px; display: grid; place-items: center; margin-top: 6px; }
-  .size-dot { background: var(--text); border-radius: 50%; }
-
-  /* bottom-right brush/size indicator */
-  .statusbar { position: fixed; right: 12px; bottom: 12px; z-index: 10; display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; color: var(--muted); }
-  .statusbar .dot { border-radius: 50%; background: var(--text); flex: none; }
-  .statusbar .ver { margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--border); font-variant-numeric: tabular-nums; opacity: .75; }
-  .zoombar { position: fixed; right: 12px; bottom: 56px; z-index: 10; display: flex; align-items: center; gap: 2px; padding: 4px; }
-  .zoombar .zbtn { border: 0; background: transparent; color: var(--text); cursor: pointer; height: 28px; min-width: 30px; border-radius: 7px; font-size: 15px; font-weight: 600; }
-  .zoombar .zbtn:hover { background: var(--bg); }
-  .zoombar .zlbl { min-width: 48px; font-size: 12px; }
 
   /* help */
   .help-fab { position: fixed; left: 12px; bottom: 12px; z-index: 11; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-sm); color: var(--muted); font-weight: 700; }
@@ -123,7 +110,7 @@
   <canvas id="pad" aria-label="Sketch canvas. Draw with a mouse, finger or stylus."></canvas>
 
   <div class="topbar">
-    <a class="brand panel" href="https://nonlinear.nyc" target="_blank" rel="noopener" title="A Nonlinear Studio tool">
+    <a class="brand panel" href="https://nonlinearstudio.org" target="_blank" rel="noopener" title="A Nonlinear Studio tool">
       <span class="logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none"><path d="M3.5 16.5c3-1 4-7 6.5-7s2 5 4.5 5 3-5 6-5.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="9" r="2" fill="#FACC15"/></svg>
       </span>
@@ -133,63 +120,34 @@
       <button class="btn icon" id="btnUndo" title="Undo (⌘Z)" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button class="btn icon" id="btnRedo" title="Redo (⌘⇧Z)" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <span class="sep"></span>
-      <button class="btn" id="btnPng" title="Download PNG"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg><span class="label">PNG</span></button>
-      <button class="btn" id="btnExport" title="Export .json"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span class="label">Export</span></button>
-      <button class="btn" id="btnImport" title="Import .json"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg><span class="label">Import</span></button>
-      <span class="sep"></span>
-      <button class="btn" id="btnSaveIllo" title="Save .illo (file)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span class="label" style="color:#7ee787">illo save</span></button>
-      <button class="btn" id="btnOpenIllo" title="Open .illo (file)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span class="label">illo open</span></button>
-      <input type="file" id="openIlloFile" accept=".illo,application/json" style="display:none">
-      <span class="sep"></span>
       <button class="btn danger icon" id="btnClear" title="Clear canvas" aria-label="Clear canvas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
     </div>
   </div>
 
   <div class="dock panel" aria-label="Tools">
-    <button class="tool" id="toolPen" data-tool="pen" title="Pen (P)" aria-label="Pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg><span class="kbd">P</span></button>
-    <button class="tool" id="toolEraser" data-tool="eraser" title="Eraser — rub out pixels (E)" aria-label="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4L13 4.9a2 2 0 0 1 2.8 0l4.3 4.3a2 2 0 0 1 0 2.8L13 19"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg><span class="kbd">E</span></button>
-    <button class="tool" id="toolStrokeEraser" data-tool="strokeEraser" title="Stroke eraser — tap a line to delete it whole (D)" aria-label="Stroke eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16c2.5-3.5 5-3.5 7.5 0s5 3.5 7.5 0"/><path d="m16 4 5 5M21 4l-5 5"/></svg><span class="kbd">D</span></button>
+    <button class="tool" id="toolPen" data-tool="pen" title="Ink (P)" aria-label="Ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg><span class="kbd">P</span></button>
+    <button class="tool" id="toolEraser" data-tool="eraser" title="Erase — tap a line, it cuts to the nearest crossing on each side (E)" aria-label="Erase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4L13 4.9a2 2 0 0 1 2.8 0l4.3 4.3a2 2 0 0 1 0 2.8L13 19"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg><span class="kbd">E</span></button>
     <button class="tool" id="toolPan" data-tool="pan" title="Pan / move the canvas (H or hold Space)" aria-label="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span class="kbd">H</span></button>
-    <button class="tool" id="toolSize" title="Brush size (S)" aria-label="Brush size" aria-haspopup="dialog" aria-controls="sizePop" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="17" r="2.5"/><circle cx="17" cy="9" r="5"/></svg><span class="kbd">S</span></button>
-    <div class="divider"></div>
+    <button class="tool" id="toolSize" title="Size (S) · [ ] smaller / bigger" aria-label="Size"><span class="dot" id="sizeDot" style="width:6px;height:6px"></span><span class="kbd">S</span></button>
     <div class="divider"></div>
     <div class="swatches" id="swatches"></div>
   </div>
 
-  <div class="size-pop panel" id="sizePop" role="dialog" aria-label="Brush size" hidden>
-    <label for="sizeRange">Brush size — <span id="sizeVal">6</span> px</label>
-    <input type="range" id="sizeRange" min="1" max="48" value="6">
-    <div class="size-preview"><span class="size-dot" id="sizeDot"></span></div>
-  </div>
-
-  <div class="statusbar panel">
-    <span class="dot" id="statusDot"></span>
-    <span id="statusText" aria-live="polite">Pen · 6 px</span>
-    <span class="ver" id="appVer" title="Build version — what this page actually runs">v0.2.2</span>
-  </div>
-
-  <div class="zoombar panel">
-    <button class="zbtn" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
-    <button class="zbtn zlbl" id="zoomLbl" title="Reset to 100%">100%</button>
-    <button class="zbtn" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-  </div>
-
   <button class="help-fab" id="helpFab" title="Help & shortcuts" aria-label="Help" aria-haspopup="dialog" aria-controls="helpPanel" aria-expanded="false">?</button>
+  <a class="help-fab" href="https://nonlinearstudio.org" target="_blank" rel="noopener" title="Nonlinear Studio" aria-label="Nonlinear Studio" style="left:54px;text-decoration:none">N</a>
   <div class="help-panel panel" id="helpPanel" role="dialog" aria-modal="false" aria-labelledby="helpTitle" tabindex="-1" hidden>
     <h3 id="helpTitle">Sketching & shortcuts</h3>
     <dl>
-      <dt><kbd>P</kbd></dt><dd>Pen (pressure-sensitive with a stylus)</dd>
-      <dt><kbd>E</kbd></dt><dd>Eraser (rub out pixels)</dd>
-      <dt><kbd>D</kbd></dt><dd>Cut — erase to the nearest crossing on each side</dd>
-            <dt><kbd>S</kbd></dt><dd>Brush size · <kbd>[</kbd> <kbd>]</kbd> smaller / bigger</dd>
+      <dt><kbd>P</kbd></dt><dd>Ink (pressure-sensitive with a stylus)</dd>
+      <dt><kbd>E</kbd></dt><dd>Erase — cut to the crossing on each side</dd>
+      <dt><kbd>S</kbd></dt><dd>Size · <kbd>[</kbd> <kbd>]</kbd> smaller / bigger</dd>
       <dt><kbd>H</kbd> / <kbd>Space</kbd></dt><dd>Pan · wheel or pinch to zoom</dd>
       <dt><kbd>⌘Z</kbd></dt><dd>Undo · <kbd>⌘⇧Z</kbd> redo</dd>
     </dl>
-    <div class="foot">Your drawing is saved in this browser. Tip: use Export now and then to keep a copy you own.<br><br>A tool by <a href="https://nonlinear.nyc" target="_blank" rel="noopener">Nonlinear Studio</a>.</div>
+    <div class="foot">Your drawing is saved in this browser. Save the page to keep a copy you own.<br><br>A tool by <a href="https://nonlinearstudio.org" target="_blank" rel="noopener">Nonlinear Studio</a>.</div>
   </div>
 
   <div id="flash" role="status" aria-live="polite"></div>
-  <input type="file" id="importFile" accept="application/json,.json" hidden>
 
 <script>
 "use strict";
@@ -285,8 +243,8 @@
   function screenXY(e) { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
   function clampZoom(z) { return Math.max(0.1, Math.min(8, z)); }
   function zoomAt(sx, sy, factor) { const nz = clampZoom(camera.zoom * factor), f = nz / camera.zoom; camera.x = sx - (sx - camera.x) * f; camera.y = sy - (sy - camera.y) * f; camera.zoom = nz; updateZoomLabel(); }
-  function setCursor() { canvas.style.cursor = (spaceHeld || state.tool === 'pan') ? 'grab' : (state.tool === 'eraser' || state.tool === 'strokeEraser') ? 'cell' : 'crosshair'; }
-  function updateZoomLabel() { const el = document.getElementById('zoomLbl'); if (el) el.textContent = Math.round(camera.zoom * 100) + '%'; }
+  function setCursor() { canvas.style.cursor = (spaceHeld || state.tool === 'pan') ? 'grab' : state.tool === 'eraser' ? 'cell' : 'crosshair'; }
+  function updateZoomLabel() { /* no zoom read-out on screen: zoom is a gesture, not a value to read */ }
   function gMetrics() { const v = [...pointers.values()], a = v[0], b = v[1]; return { mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1 }; }
   function updateGesture() { if (pointers.size < 2) return; const m = gMetrics(); camera.x += m.mx - gesture.mx; camera.y += m.my - gesture.my; zoomAt(m.mx, m.my, m.d / gesture.d); gesture = { mx: m.mx, my: m.my, d: m.d }; redrawAll(); scheduleSave(); }
   function abortDrawing() { drawing = null; erasing = false; erasedAny = false; if (activeId !== null) { try { canvas.releasePointerCapture(activeId); } catch (err) {} } activeId = null; activeType = null; redrawAll(); }
@@ -314,13 +272,19 @@
     // cannot make a true illo line (epic illo-line-vs-brush), so it does not draw one.
     // Placed BEFORE setPointerCapture: capture on a non-pen would leave the mouse
     // holding the pointer, and every later pointermove would be retargeted to canvas.
-    const penOnly = !(e.button === 1 || spaceHeld || state.tool === 'pan' || state.tool === 'strokeEraser');
-    if (penOnly && e.pointerType !== 'pen') { flash('Draw with a pen. Mouse and finger pan, zoom and erase.'); return; }
+    const gatesInk = !(e.button === 1 || spaceHeld || state.tool === 'pan');
+    if (gatesInk && e.pointerType !== 'pen') { flash('Draw with a pen. Mouse and finger pan, zoom and erase.'); return; }
     e.preventDefault();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     activeId = e.pointerId; activeType = e.pointerType;
     if (spaceHeld || state.tool === 'pan' || e.button === 1) { panning = { sx: e.clientX, sy: e.clientY, cx: camera.x, cy: camera.y }; canvas.style.cursor = 'grabbing'; return; }
-    if (state.tool === 'strokeEraser') {
+    // Erase IS erase-to-intersection (owner, 2026-10-28): "tem erase mas não eh erase to
+    // intersection. tocou, deleta toda linha até intercessão." There used to be two
+    // erasers -- a pixel eraser and a whole-stroke eraser -- and neither was the action
+    // the drawing asks for. One tool: tap the line, it cuts to the nearest crossing on
+    // each side. `erasing` now only means "a tap is in flight", so endStroke() pushes
+    // ONE undo step for it.
+    if (state.tool === 'eraser') {
       erasing = true; erasedAny = false;
       eraseToIntersection(pt(e));
       return;
@@ -336,7 +300,7 @@
     if (panning) { camera.x = panning.cx + (e.clientX - panning.sx); camera.y = panning.cy + (e.clientY - panning.sy); redrawAll(); scheduleSave(); return; }
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     const list = events.length ? events : [e];
-    if (erasing) { for (const ev of list) eraseAt(pt(ev)); return; }
+    if (erasing) { for (const ev of list) eraseToIntersection(pt(ev)); return; }
     if (!drawing) return;
     for (const ev of list) {
       const p = pt(ev), last = drawing.pts[drawing.pts.length - 1];
@@ -357,25 +321,7 @@
     if (drawing && drawing.pts.length) { state.strokes.push(drawing); pushHistory(); }
     drawing = null;
   }
-  // ---------- stroke eraser (delete a whole stroke on touch) ----------
-  function distToSeg(px, py, ax, ay, bx, by) {
-    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
-    let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t));
-    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-  }
-  function strokeHit(s, x, y) {
-    const tol = s.size / 2 + 8 / camera.zoom, p = s.pts;
-    if (p.length === 1) return Math.hypot(x - p[0][0], y - p[0][1]) <= tol;
-    for (let i = 1; i < p.length; i++) if (distToSeg(x, y, p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]) <= tol) return true;
-    return false;
-  }
-  function eraseAt(pp) {
-    for (let i = state.strokes.length - 1; i >= 0; i--) {
-      if (strokeHit(state.strokes[i], pp[0], pp[1])) { state.strokes.splice(i, 1); erasedAny = true; redrawAll(); return; }
-    }
-  }
-
-  // ---------- erase to intersection (MVP) ----------
+  // ---------- erase to intersection (the whole erase, and the whole of it) ----------
   // Semantics (owner, 2026-10-25): tap a line. Find the intersection with another line
   // that is CLOSEST TO THE TAP. Delete everything on the TAP SIDE of that intersection.
   // If a straight line crosses a curved one, the tap side can be the MIDDLE -- then the
@@ -383,6 +329,12 @@
   // no line groups, no eraser strokes in state. The whole cut is ONE undo step.
   const SEG_MIN = 0.5;       // ignore near-degenerate segments
   const SEG_EPS = 0.5;       // world units; hit is snapped just past the crossing
+
+  function distToSeg(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
 
   function segHit(a, b, x, y) {
     const tol = Math.max(a[2], b[2]) + 10 / camera.zoom;
@@ -713,56 +665,42 @@
   // ---------- tools / ui ----------
   function setTool(t) {
     state.tool = t;
-    [['toolPen', 'pen'], ['toolEraser', 'eraser'], ['toolStrokeEraser', 'strokeEraser'], ['toolPan', 'pan']].forEach(([id, name]) => {
+    [['toolPen', 'pen'], ['toolEraser', 'eraser'], ['toolPan', 'pan']].forEach(([id, name]) => {
       const el = document.getElementById(id);
       el.classList.toggle('active', t === name); el.setAttribute('aria-pressed', String(t === name));
     });
     setCursor();
-    updateStatus(); save();
+    save();
   }
   document.getElementById('toolPen').onclick = () => setTool('pen');
   document.getElementById('toolEraser').onclick = () => setTool('eraser');
-  document.getElementById('toolStrokeEraser').onclick = () => setTool('strokeEraser');
   // Build version -- visible so "is this the version I tested?" has an answer.
-  const APP_VERSION = '0.2.2';
+  const APP_VERSION = '0.3.0';
   (function stampVersion() {
-    const el = document.getElementById('appVer');
-    if (el) el.textContent = 'v' + APP_VERSION;
     document.title = 'Illo · v' + APP_VERSION;
   })();
   document.getElementById('toolPan').onclick = () => setTool('pan');
-  document.getElementById('zoomIn').onclick = () => { zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1.2); redrawAll(); scheduleSave(); };
-  document.getElementById('zoomOut').onclick = () => { zoomAt(window.innerWidth / 2, window.innerHeight / 2, 1 / 1.2); redrawAll(); scheduleSave(); };
-  document.getElementById('zoomLbl').onclick = () => { camera = { x: 0, y: 0, zoom: 1 }; updateZoomLabel(); redrawAll(); scheduleSave(); };
 
   const swatchWrap = document.getElementById('swatches');
   COLORS.forEach(c => {
     const b = document.createElement('button');
     b.className = 'swatch'; b.style.background = c; b.dataset.c = c;
     b.title = c; b.setAttribute('aria-label', 'Color ' + c);
-    b.onclick = () => { state.color = c; if (state.tool === 'eraser') setTool('pen'); markSwatch(); updateStatus(); save(); };
+    b.onclick = () => { state.color = c; if (state.tool === 'eraser') setTool('pen'); markSwatch(); };
     swatchWrap.appendChild(b);
   });
   function markSwatch() { document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('sel', s.dataset.c === state.color)); }
 
-  const sizePop = document.getElementById('sizePop'), sizeRange = document.getElementById('sizeRange'), sizeVal = document.getElementById('sizeVal'), sizeDot = document.getElementById('sizeDot');
-  document.getElementById('toolSize').onclick = (e) => { e.stopPropagation(); sizePop.hidden = !sizePop.hidden; document.getElementById('toolSize').setAttribute('aria-expanded', String(!sizePop.hidden)); };
-  document.addEventListener('pointerdown', (e) => { if (!sizePop.hidden && !sizePop.contains(e.target) && e.target.id !== 'toolSize' && !e.target.closest('#toolSize')) sizePop.hidden = true; });
+  // SIZE HAS NO PANEL (owner, 2026-10-28: "o meuzinho abaixo com tool e TAMANHO. deleta.").
+  // The dock button IS the read-out: a dot the size of the nib. Tap it to step up,
+  // [ and ] to step down/up. One knob, no second surface.
+  const sizeDot = document.getElementById('sizeDot');
+  document.getElementById('toolSize').onclick = () => setSize(state.size >= 24 ? 1 : state.size + 2);
   function setSize(n) {
     state.size = Math.max(1, Math.min(48, Math.round(n)));
-    sizeRange.value = state.size; sizeVal.textContent = state.size;
-    const d = Math.max(4, Math.min(40, state.size)); sizeDot.style.width = d + 'px'; sizeDot.style.height = d + 'px';
-    updateStatus(); save();
-  }
-  sizeRange.oninput = () => setSize(+sizeRange.value);
-
-  function updateStatus() {
-    const d = Math.max(5, Math.min(22, state.size));
-    const dot = document.getElementById('statusDot');
-    dot.style.width = d + 'px'; dot.style.height = d + 'px';
-    dot.style.background = state.tool === 'eraser' ? 'transparent' : state.color;
-    dot.style.boxShadow = state.tool === 'eraser' ? 'inset 0 0 0 2px var(--faint)' : 'none';
-    document.getElementById('statusText').textContent = state.tool === 'pan' ? 'Pan · drag to move' : state.tool === 'strokeEraser' ? 'Cut · erase to intersection' : (state.tool === 'eraser' ? 'Eraser' : 'Pen') + ' · ' + state.size + ' px';
+    const d = Math.max(4, Math.min(38, state.size));
+    sizeDot.style.width = d + 'px'; sizeDot.style.height = d + 'px';
+    save();
   }
 
   // ---------- undo / redo / clear ----------
@@ -840,24 +778,10 @@
     const data = JSON.stringify({ app: 'illo', version: 1, strokes: state.strokes });
     download(new Blob([data], { type: 'application/json' }), 'sketch.json');
   }
-  document.getElementById('btnPng').onclick = exportPNG;
-  document.getElementById('btnExport').onclick = exportJSON;
-  document.getElementById('btnImport').onclick = () => document.getElementById('importFile').click();
-  document.getElementById('importFile').onchange = (e) => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
-    if (f.size > 8 * 1024 * 1024) { flash('File too large'); return; }
-    const r = new FileReader();
-    r.onload = () => {
-      let d; try { d = JSON.parse(r.result); } catch (err) { flash('Could not load file: ' + err.message); return; }
-      const next = sanitizeStrokes(d && d.strokes);
-      if (!next.length) { flash('No drawing found in that file'); return; }
-      if (state.strokes.some(x => !x._welcome) && !confirm('Importing will replace the current drawing. Continue?')) return;
-      state.strokes = next; redrawAll(); history = [snapshot()]; hIndex = 0; updateUndo(); scheduleSave(); flash('Imported ' + f.name);
-    };
-    r.onerror = () => flash('Could not read file');
-    r.readAsText(f);
-  };
+  // NOT WIRED, ON PURPOSE (owner, 2026-10-28). PNG / Export / Import / .illo save+open
+  // were never asked for and every one of them was incomplete. The helpers below stay as
+  // an unwired draft: do not attach them to a button without re-opening the question.
+  // See epic P22E012 §"Menus".
 
   // ---------- persistence ----------
   function sanitizeStrokes(arr) {
@@ -905,7 +829,6 @@
 
   // ---------- keyboard ----------
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !sizePop.hidden) { sizePop.hidden = true; document.getElementById('toolSize').setAttribute('aria-expanded', 'false'); return; }
     if (e.key === 'Escape' && !helpPanel.hidden) { helpPanel.hidden = true; helpFab.setAttribute('aria-expanded', 'false'); helpFab.focus(); return; }
     const meta = e.metaKey || e.ctrlKey;
     if (meta && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -913,8 +836,7 @@
     if (meta) return;
     if (e.key === 'p' || e.key === 'P') setTool('pen');
     else if (e.key === 'e' || e.key === 'E') setTool('eraser');
-    else if (e.key === 'd' || e.key === 'D') setTool('strokeEraser');
-    else if (e.key === 's' || e.key === 'S') sizePop.hidden = !sizePop.hidden;
+    else if (e.key === 's' || e.key === 'S') setSize(state.size + 2);
     else if (e.key === '[') setSize(state.size - 2);
     else if (e.key === ']') setSize(state.size + 2);
     else if (e.key === 'h' || e.key === 'H') setTool('pan');
@@ -1018,25 +940,11 @@
     }
     document.getElementById('openIlloFile').click();
   }
-  document.getElementById('openIlloFile').onchange = (e) => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = () => {
-      let d; try { d = JSON.parse(r.result); } catch (err) { flash('Could not read .illo: ' + err.message); return; }
-      const next = illoToState(d);
-      if (!next) { flash('Not a valid .illo file'); return; }
-      if (state.strokes.some(x => !x._welcome) && !confirm('Open will replace the current drawing. Continue?')) return;
-      state.strokes = next; redrawAll(); history = [snapshot()]; hIndex = 0; updateUndo(); scheduleSave();
-      setIlloHint(f.name); flash('Opened ' + f.name);
-    };
-    r.onerror = () => flash('Could not read file');
-    r.readAsText(f);
-  };
+  // The file-input handler is not wired: the "illo open" button is gone (owner,
+  // 2026-10-28), and wiring an input that does not exist throws on every load.
 
-  document.getElementById('btnSaveIllo').onclick = saveIlloFile;
-  document.getElementById('btnOpenIllo').onclick = openIlloFile;
-
+  // The .illo file helpers above have no caller: the buttons that reached
+  // saveIlloFile / openIlloFile are gone (owner, 2026-10-28). Kept as a draft.
   // ---------- init ----------
   const hadSaved = load();
   setTool(state.tool);

@@ -105,7 +105,7 @@ run_check() {
 has() { case " $APP_UNIQ " in *" $1 "*) echo 1;; *) echo 0;; esac; }
 
 # illo.repo.* — ALWAYS applicable: the contract invariants
-run_check illo.repo.clean-tree 1 bash "$CHECKS/repo-clean-tree.sh" "$REPO"
+run_check illo.repo.clean-tree 1 bash "$CHECKS/repo-clean-tree.sh" "$REPO" "$TRIGGER"
 run_check illo.repo.no-network 1 bash "$CHECKS/repo-no-network.sh" "$REPO"
 run_check illo.repo.serving    1 bash "$CHECKS/repo-serving.sh"
 run_check illo.repo.source     1 bash "$CHECKS/repo-source-of-truth.sh" "$REPO"
@@ -115,6 +115,7 @@ run_check illo.app.syntax        "$(has app)" bash "$CHECKS/app-syntax.sh" "$REP
 run_check illo.app.erase         "$(has app)" bash "$CHECKS/app-erase.sh" "$REPO"
 run_check illo.app.erasers       "$(has app)" bash "$CHECKS/app-erasers.sh" "$REPO"
 run_check illo.app.pen-only      "$(has app)" bash "$CHECKS/app-pen-only.sh" "$REPO"
+run_check illo.app.chrome        "$(has app)" bash "$CHECKS/app-chrome.sh" "$REPO"
 run_check illo.app.no-phantom-writes "$(has app)" bash "$CHECKS/app-no-phantom-writes.sh" "$REPO"
 
 # illo.pwa.* — the surface the operating system touches
