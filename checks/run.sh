@@ -17,15 +17,22 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECKS="$REPO/checks"
 OUT="$CHECKS/checkpoints"
 TRIGGER="${1:-all}"
+
+# `status` must not create a checkpoint — it only reads. Before this guard it made
+# its own empty directory and then found it, so it always reported "no checkpoint".
+if [ "$TRIGGER" = "status" ]; then
+  last=$(ls -1d "$OUT"/*/ 2>/dev/null | grep -v -- '-status/$' | tail -1)
+  if [ -n "$last" ] && [ -f "$last/checkpoint.md" ]; then
+    cat "$last/checkpoint.md"
+  else
+    echo "no checkpoint yet"
+  fi
+  exit 0
+fi
+
 STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 CKPT="$OUT/$STAMP-$TRIGGER"
 mkdir -p "$CKPT/evidence"
-
-if [ "$TRIGGER" = "status" ]; then
-  last=$(ls -1d "$OUT"/*/ 2>/dev/null | tail -1)
-  [ -n "$last" ] && cat "$last/checkpoint.md" || echo "no checkpoint yet"
-  exit 0
-fi
 
 # ---------------------------------------------------------------- applicable
 # Applicability by context, never by cost (anatomy §1, invariant).
