@@ -9,10 +9,10 @@ A drawing app that's just one HTML file. Open it and draw — with a pressure-se
 [![license: MIT](https://img.shields.io/badge/license-MIT-7C3AED.svg)](LICENSE)
 ![dependencies: 0](https://img.shields.io/badge/dependencies-0-22C55E)
 ![single file](https://img.shields.io/badge/single%20file-HTML-3B82F6)
-![network requests: 0](https://img.shields.io/badge/network%20requests-0-22C55E)
+![offline file: 0 requests](https://img.shields.io/badge/index.html%20network%20requests-0-22C55E)
 ![vanilla JS](https://img.shields.io/badge/vanilla-JS-EAB308)
 
-**[Open the app](https://raw.githubusercontent.com/nonlinear/illo/main/index.html)** and draw something, or download `index.html` and open it on any machine, even one with no internet.
+**[Open the app](https://illo.nonlinearstudio.org/)** and draw something. Or take [`index.html`](index.html) — one file that runs offline on any machine, even one with no internet.
 
 ![Illo screenshot](screenshot.png)
 

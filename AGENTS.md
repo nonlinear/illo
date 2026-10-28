@@ -4,36 +4,49 @@ Instructions for any agent working in this repository.
 
 ## What this is
 
-**Illo** — a private, offline drawing app in **one HTML file**. No build, no
-dependencies, no network.
+**Illo** — a private drawing app in **one HTML file**, plus a small trusted
+server so a drawing can stream as you draw. No build, no dependencies.
 
 | | |
 |---|---|
 | Local | `~/Documents/illo` |
 | Repo | `github.com/nonlinear/illo` · repo `illo` · user `nonlinear` |
 | Agent owner | `illo` (`~/.openclaw/agents/illo/`) |
+| Server | `server/illo_server.py` on `127.0.0.1:3003` (same port the tunnel points at) |
+| Public | `illo.nonlinearstudio.org` → Cloudflare tunnel → `localhost:3003` |
 
-There is **no build step and no Pages deployment**. The repo is the source of truth;
-`index.html` at the root *is* the app. To use it, take the file — that is the whole
-product. GitHub Pages is not used for this project.
+There is **no build step**. `index.html` is the single-file offline app;
+`vault.html` is the same idea wired to the server; `m0.html` and `probe.html` are
+instruments. Whatever is in this folder **is** what the site serves — no symlink,
+no copy, no second tree.
+
+**This folder is the whole product.** If a change makes the folder and the site
+differ, the change is wrong.
 
 ## The one rule that shapes everything
 
-**Zero network requests.** Not "few" — zero. No CDN, no web fonts, no analytics,
-no telemetry, no external images. Open DevTools → Network → reload: the page itself
-is the only entry. This is what makes the app work on a machine with no internet,
-which is the entire point.
+**A request must never be on the path of a pen sample.**
 
-A PR that adds a network call is rejected, however small.
+The client renders from memory. Points stream to the server in batches, apart from
+rendering, and a failed request is dropped rather than retried in a tight loop.
+That is the whole reason storage is append-only JSONL. Breaking this rule is how
+the canvas starts to feel the save.
+
+`index.html` (the offline app) must stay a single file with **zero network
+requests** — it is the deliverable you can put on a USB stick. A pull request that
+adds a network call to `index.html` is rejected, however small. `vault.html` is the
+one allowed to talk to `/api`.
 
 ## Ground rules
 
 | Rule | Why |
 |---|---|
-| **One file.** `index.html` holds HTML, CSS and vanilla JS. | The deliverable is a file you can put on a USB stick. A build step would break that. |
-| **No dependencies.** No npm, no bundler, no framework. | Every dependency is a supply chain and a thing that can break offline. |
+| **One file for the app.** `index.html` holds HTML, CSS and vanilla JS. | The deliverable is a file you can put on a USB stick. A build step would break that. |
+| **No dependencies.** Stdlib Python and vanilla JS. No npm, no bundler, no framework. | Every dependency is a supply chain and a thing that can break. |
 | **No build step.** Edit, refresh. | If you need a compiler to test a change, the change is wrong. |
 | **Pressure matters.** Test with a stylus when you can. | Tapered lines are the product, not a detail. |
+| **No symlinks into other folders.** | A symlink is a second tree with extra steps. The product is this folder. |
+| **State is not source.** `server/data/` is ignored by git. | The drawing is data. It is backed up, not committed. |
 
 ## Storage keys
 
@@ -67,7 +80,9 @@ By hand, with a mouse and if possible a stylus:
 - undo / redo / clear
 - export PNG, export and re-import `.json`
 - reload — autosave must restore the drawing
-- **DevTools → Network → reload: still 0 requests**
+- **`index.html` opened from disk: DevTools → Network → reload: 0 requests**
+- **`vault.html` served from `:3003`: draw one line, then reload — the line comes
+  back from the server, and the sync label reads `saved`**
 
 ## What fits
 
