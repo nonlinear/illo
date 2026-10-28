@@ -3,9 +3,14 @@
 <title>pen probe</title>
 <style>html,body{margin:0;height:100%;background:#fff;overflow:hidden;font:13px/1.4 monospace}
 canvas{display:block;touch-action:none}
+#bar{position:fixed;left:8px;top:8px;right:8px;display:flex;gap:6px;font:12px monospace}
+#bar input,#bar button{font:12px monospace;padding:4px 6px;border:1px solid #ccc;border-radius:6px;background:#fff}
 #log{position:fixed;left:8px;bottom:8px;right:8px;max-height:46%;overflow:auto;background:rgba(255,255,255,.95);
 border:1px solid #ccc;border-radius:8px;padding:8px;white-space:pre;font-size:11px}</style></head>
-<body><canvas id="c"></canvas><div id="log">touch the screen with anything. reads every pointer type.\n</div>
+<body><canvas id="c"></canvas>
+<div id="bar"><input id="dev" placeholder="device name (e.g. Oppo Pad, iPad 9, Wacom Intuos)" size="34">
+<button id="copy">copy report</button></div>
+<div id="log">touch the screen with anything. reads every pointer type.\n</div>
 <script>
 const c=document.getElementById('c'),ctx=c.getContext('2d'),log=document.getElementById('log');
 let dpr=devicePixelRatio||1;
@@ -45,8 +50,30 @@ function stat(a){if(!a||!a.length)return '—';
  const lo=Math.min(...a),hi=Math.max(...a),avg=a.reduce((x,y)=>x+y,0)/a.length;
  return `${lo.toFixed(3)}..${hi.toFixed(3)} avg ${avg.toFixed(3)}`;
 }
+// ---- veredito de pressao ----
+// A spec (MDN, PointerEvent.pressure) e explicita: hardware SEM pressao devolve
+// 0.5 fixo enquanto o botao esta ativo. Logo 0.5 nao e "meia pressao", e "nao sei".
+// A unica medicao honesta e a VARIEDADE de valores:
+//   distinct == 1  -> sem sensor OU o artista nao variou  -> NAO CONCLUI
+//   distinct >= 2  -> existe sensor                         -> CONCLUI SIM
+// Presenca e demonstravel; ausencia nao. Um trace nunca prova que NAO ha pressao.
+function verdict(vals){
+  const uniq=new Set(vals.map(v=>v.toFixed(3))).size;
+  if(uniq>=2) {
+    const flat = vals.every(v=>Math.abs(v-0.5)<1e-9);
+    if(flat) return {uniq, txt:'SIM, sensor presente (mas so reportou 0.5)'};
+    return {uniq, txt:'SIM, pressao real'};
+  }
+  if(vals.length && vals.every(v=>Math.abs(v-0.5)<1e-9)) return {uniq, txt:'INCONCLUSIVO — 0.5 constante = "sem sensor" OU traco uniforme. Faca tracos variados.'};
+  return {uniq, txt:'INCONCLUSIVO — valor unico. Faca varios tracos com forca diferente.'};
+}
+
 function flush(){
   let out='';
+  const dev=(document.getElementById('dev').value||'').trim()||'(sem nome)';
+  out+=`device: ${dev}\n`;
+  out+=`ua: ${navigator.userAgent}\n`;
+  out+=`maxTouchPoints: ${navigator.maxTouchPoints}   coalesced: ${!!Event.prototype.getCoalescedEvents}\n`;
   for(const k of Object.keys(S)){
     const s=S[k];
     out+=`── ${k.toUpperCase()} (${s.n} samples)\n`;
@@ -58,10 +85,19 @@ function flush(){
     out+=`   twist      ${stat(s.twist)}\n`;
     out+=`   coalesced  ${stat(s.coal)}\n`;
     out+=`   dt ms      ${stat(s.dt)}\n`;
-    const uniq=new Set(s.p.map(v=>v.toFixed(3))).size;
-    out+=`   distinct pressure values: ${uniq}\n`;
+    const v=verdict(s.p);
+    out+=`   distinct pressure values: ${v.uniq}\n`;
+    out+=`   >>> PRESSAO: ${v.txt}\n`;
   }
   log.textContent=out;
   window.__probe=JSON.parse(JSON.stringify(S));
+  window.__report=out;
 }
+
+document.getElementById('copy').onclick=async()=>{
+  const t=window.__report||log.textContent;
+  try{ await navigator.clipboard.writeText(t); document.getElementById('copy').textContent='copied'; }
+  catch(e){ log.textContent='clipboard blocked — select the text manually\n\n'+t; }
+};
+document.getElementById('dev').addEventListener('change',flush);
 </script></body></html>
