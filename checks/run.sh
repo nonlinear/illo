@@ -50,6 +50,13 @@ while IFS= read -r f; do
     checks/*) harness_changed=1 ;;
   esac
 done <<< "$changed"
+
+# A changed harness lies about every other check (anatomy §4.1). If checks/ moved,
+# the whole battery must re-prove itself against the current code, not just the
+# harness's own shape.
+if [ "$harness_changed" = "1" ]; then
+  APP_LIST=" app pwa probe"
+fi
 APP_UNIQ="${APP_LIST# }"
 
 # ------------------------------------------------------------------- runner
