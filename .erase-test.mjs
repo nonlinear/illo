@@ -17,6 +17,10 @@ const factory = new Function(
    function distToSeg(px,py,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));}
    const state = { strokes: STROKES, size: 6 };
    const camera = { x: 0, y: 0, zoom: 1 };
+   // The real radius curve from index.html, so the hit tolerance under test is the one
+   // the app draws with -- not a number invented by the harness.
+   const PRESSURE_FLOOR = 0.10;
+   function radiusFor(size, t) { return Math.max((size / 2) * (PRESSURE_FLOOR + (1 - PRESSURE_FLOOR) * t), 0.5); }
    function pushHistory() {}
    function redrawAll() {}
    ${src}

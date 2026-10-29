@@ -114,6 +114,7 @@
     <button class="tool" id="toolEraser" data-tool="eraser" title="Erase — tap a line, it cuts to the nearest crossing on each side (E)" aria-label="Erase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4L13 4.9a2 2 0 0 1 2.8 0l4.3 4.3a2 2 0 0 1 0 2.8L13 19"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg><span class="kbd">E</span></button>
     <button class="tool" id="toolPan" data-tool="pan" title="Pan / move the canvas (H or hold Space)" aria-label="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span class="kbd">H</span></button>
     <button class="tool" id="toolSize" title="Size (S) · [ ] smaller / bigger" aria-label="Size"><span class="dot" id="sizeDot" style="width:6px;height:6px"></span><span class="kbd">S</span></button>
+    <button class="tool" id="toolReload" title="Reload the page (R)" aria-label="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="kbd">R</span></button>
     <div class="divider"></div>
     <div class="swatches" id="swatches"></div>
   </div>
@@ -126,6 +127,7 @@
       <dt><kbd>E</kbd></dt><dd>Erase — cut to the crossing on each side</dd>
       <dt><kbd>S</kbd></dt><dd>Size · <kbd>[</kbd> <kbd>]</kbd> smaller / bigger</dd>
       <dt><kbd>H</kbd> / <kbd>Space</kbd></dt><dd>Pan · wheel or pinch to zoom</dd>
+      <dt><kbd>R</kbd></dt><dd>Reload the page (saves first)</dd>
       <dt><kbd>⌘Z</kbd></dt><dd>Undo · <kbd>⌘⇧Z</kbd> redo</dd>
     </dl>
     <div class="foot">Your drawing is saved in this browser. Save the page to keep a copy you own.<br><br>A tool by <a href="https://nonlinearstudio.org" target="_blank" rel="noopener">Nonlinear Studio</a>.</div>
@@ -325,7 +327,14 @@
   }
 
   function segHit(a, b, x, y) {
-    const tol = Math.max(a[2], b[2]) + 10 / camera.zoom;
+    // Tolerance must scale with the drawn width, and a[2]/b[2] are PRESSURE (0.05..1),
+    // not a radius: the old form was a constant +-10 world units, so a tap 5px from a line
+    // still counted. Two strokes were then equidistant from the tap, the 1px tolerance in
+    // betterTap() called it a tie, and the tie-break picked the LONGER one -- so a tap on a
+    // horizontal line could erase a nearby vertical one. Radius in world units, plus a
+    // 2px slop at the current zoom so a fingertip still lands.
+    const r = Math.max(radiusFor(state.size, a[2] || 1), radiusFor(state.size, b[2] || 1));
+    const tol = r + 2 / camera.zoom;
     return distToSeg(x, y, a[0], a[1], b[0], b[1]) <= tol;
   }
 
@@ -544,7 +553,12 @@
         if (betterTap(cand, best)) { best = cand; bestI = i; bestA = k - 1; bestB = k; }
       }
     }
-    if (bestI < 0) return false;
+    if (bestI < 0) {
+      // Never silence (criterion 4). A tap that hit no stroke is ambiguous -- it usually
+      // means the erase ran before the drawing was on screen -- so it must SAY so.
+      flash('Erase: tap on a line');
+      return false;
+    }
     const s = state.strokes[bestI], total = s.pts.length - 1;
     // Crossings arrive DUPLICATED: a vertical stroke is many small segments, and the
     // crossing lands in two of them (or the segment end is shared by two segments), so
@@ -684,6 +698,16 @@
   // [ and ] to step down/up. One knob, no second surface.
   const sizeDot = document.getElementById('sizeDot');
   document.getElementById('toolSize').onclick = () => setSize(state.size >= 24 ? 1 : state.size + 2);
+  // RELOAD (owner, 2026-10-29): "não existe recarregar página. não há keyboard. É fullscreen."
+  // A fullscreen PWA opens with no address bar and no keyboard, so "just reload" was not
+  // an instruction the owner could follow. The dock carries the reload instead: it saves
+  // first, so a reload never costs a stroke, and it is a plain object after the tools --
+  // not a menu, not hidden behind a long press.
+  function reloadApp() {
+    save();
+    location.reload();
+  }
+  document.getElementById('toolReload').onclick = reloadApp;
   function setSize(n) {
     state.size = Math.max(1, Math.min(48, Math.round(n)));
     const d = Math.max(4, Math.min(38, state.size));
@@ -822,6 +846,7 @@
     else if (e.key === '[') setSize(state.size - 2);
     else if (e.key === ']') setSize(state.size + 2);
     else if (e.key === 'h' || e.key === 'H') setTool('pan');
+    else if (e.key === 'r' || e.key === 'R') reloadApp();
     else if (e.code === 'Space') { const ae = document.activeElement; if (!(ae && (ae.tagName === 'BUTTON' || ae.tagName === 'INPUT')) && !spaceHeld) { spaceHeld = true; setCursor(); e.preventDefault(); } }
   });
 

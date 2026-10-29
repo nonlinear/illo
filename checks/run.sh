@@ -117,6 +117,12 @@ run_check illo.app.erasers       "$(has app)" bash "$CHECKS/app-erasers.sh" "$RE
 run_check illo.app.pen-only      "$(has app)" bash "$CHECKS/app-pen-only.sh" "$REPO"
 run_check illo.app.chrome        "$(has app)" bash "$CHECKS/app-chrome.sh" "$REPO"
 run_check illo.app.no-phantom-writes "$(has app)" bash "$CHECKS/app-no-phantom-writes.sh" "$REPO"
+run_check illo.app.reload        "$(has app)" bash "$CHECKS/app-reload.sh" "$REPO"
+# BEHAVIOUR, not shape. The pen-gate bug passed 14/14 static checks while the erase
+# button was dead for every non-pen pointer: only a real event sequence catches that.
+# Chromium via Playwright; if the browser is missing this reports ENVIRONMENT_BLOCKED,
+# never PASS (an unrun check must not look like a passing one).
+run_check illo.app.browser-erase "$(has app)" bash "$CHECKS/browser-run.sh" "$REPO"
 
 # illo.pwa.* — the surface the operating system touches
 run_check illo.pwa.icons         "$(has pwa)" bash "$CHECKS/pwa-icons.sh" "$REPO"
