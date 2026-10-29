@@ -32,5 +32,11 @@ if draw >= 0 and gate > draw:
     print("FAILURE_TYPE: ASSERTION"); print("pen gate is AFTER the stroke is created"); sys.exit(1)
 if cap >= 0 and gate > cap:
     print("FAILURE_TYPE: ASSERTION"); print("pen gate is AFTER setPointerCapture — mouse would hold the pointer"); sys.exit(1)
+# The gate must cover INK ONLY. If it also covers the eraser, a mouse tap on the
+# erase button returns silently and the tool looks broken (bug, 2026-10-29).
+if "state.tool === 'pen'" not in code:
+    print("FAILURE_TYPE: ASSERTION"); print("pen gate is not scoped to the pen tool — erase is blocked for mouse/finger"); sys.exit(1)
+if "state.tool !== 'pan'" in code:
+    print("FAILURE_TYPE: ASSERTION"); print("pen gate still keyed on '!== pan' — that blocks the eraser too"); sys.exit(1)
 print("pen gate at line %d, capture at %d, stroke at %d" % (gate, cap, draw))
 PY

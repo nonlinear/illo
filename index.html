@@ -256,8 +256,12 @@
     // cannot make a true illo line (epic illo-line-vs-brush), so it does not draw one.
     // Placed BEFORE setPointerCapture: capture on a non-pen would leave the mouse
     // holding the pointer, and every later pointermove would be retargeted to canvas.
-    const gatesInk = !(e.button === 1 || spaceHeld || state.tool === 'pan');
-    if (gatesInk && e.pointerType !== 'pen') { return; }
+    // The gate is on INK, not on the pointer (bug fixed 2026-10-29): it used to read
+    // `state.tool !== 'pan'`, which is true for the eraser, so a mouse or a finger on
+    // the erase button got a silent `return` -- the button did nothing at all. Erase
+    // writes no ink; it only cuts geometry, so the pen requirement does not apply.
+    const gatesInk = state.tool === 'pen';
+    if (gatesInk && e.pointerType !== 'pen') { flash('Ink needs the stylus'); return; }
     e.preventDefault();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     activeId = e.pointerId; activeType = e.pointerType;
