@@ -65,8 +65,12 @@
   .btn svg { width: 16px; height: 16px; }
   .btn.danger:hover { background: #FEF2F2; border-color: #FECACA; color: #DC2626; }
 
-  /* left tool dock */
-  .dock { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); z-index: 10; display: flex; flex-direction: column; gap: 6px; padding: 8px; align-items: center; }
+  /* RIGHT-HAND TOOL DOCK. It sat on the left until 2026-11-11, when the owner said
+     "eu sou canhoto. move o menu pra direita." A left dock is directly under a left wrist:
+     the hand that holds the phone rests on the tools, and every stroke that starts near the
+     edge starts on a button. The right edge is where a left-handed grip leaves the thumb
+     free -- the dock goes where the hand is not. Not a preference, an anatomy. */
+  .dock { position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 10; display: flex; flex-direction: column; gap: 6px; padding: 8px; align-items: center; }
   /* A CONTROL KEEPS ITS OWN GESTURE. The dock sits on top of a full-screen paper, and the
      browser decides who owns a touch by `touch-action` -- the ONLY signal that settles it.
      The value `manipulation` (Chrome's own default for buttons) offers tap AND PAN, and since
@@ -107,9 +111,9 @@
   .swatch.sel { box-shadow: 0 0 0 2px var(--primary); }
 
   /* help */
-  .help-fab { position: fixed; left: 12px; bottom: 12px; z-index: 11; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-sm); color: var(--muted); font-weight: 700; }
+  .help-fab { position: fixed; right: 12px; bottom: 12px; z-index: 11; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow-sm); color: var(--muted); font-weight: 700; }
   .help-fab:hover { color: var(--primary); border-color: var(--primary); }
-  .help-panel { position: fixed; left: 12px; bottom: 54px; z-index: 12; width: 290px; padding: 16px 18px; }
+  .help-panel { position: fixed; right: 12px; bottom: 54px; z-index: 12; width: 290px; padding: 16px 18px; }
   .help-panel h3 { margin: 0 0 10px; font-size: 14px; }
   .help-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; margin: 0; font-size: 13px; }
   .help-panel dt { display: flex; gap: 4px; }
@@ -715,7 +719,7 @@
   document.getElementById('toolUndo').onclick = () => { undo(); };
   document.getElementById('toolRedo').onclick = () => { redo(); };
   // Build version -- visible so "is this the version I tested?" has an answer.
-  const APP_VERSION = '0.4.0';
+  const APP_VERSION = '0.4.1';
   (function stampVersion() {
     document.title = 'Illo · v' + APP_VERSION;
   })();

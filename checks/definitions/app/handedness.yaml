@@ -1,0 +1,43 @@
+# Check: illo.app.handedness
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+
+id: illo.app.handedness
+version: 1.0.0
+predicate: dock_and_help_sit_on_the_right_edge
+source: local_browser
+target: computed layout of .dock and .help-fab
+lifecycle: active
+
+# Owner, 2026-11-11: "eu sou canhoto. move o menu pra direita."
+# A left dock on a phone sits under a left wrist. The hand holding the device rests on the
+# tools, and a stroke that starts near the edge starts on a button. The right edge is where
+# a left-handed grip leaves the thumb free. This is anatomy, not taste, so it is asserted on
+# the COMPUTED box in a real browser: a stylesheet can say right:12px and be overridden.
+
+context:
+  requires: ["index.html", "playwright"]
+
+preconditions:
+  - "playwright chromium available"
+
+execution:
+  - action: navigate
+    args: {"viewport": "393x851", "has_touch": true, "is_mobile": true}
+  - action: measure
+    args: {"selectors": [".dock", ".help-fab"]}
+
+assertion: >
+  For .dock and .help-fab, the distance to the right edge is smaller than the distance to the
+  left edge, and neither box is partly off-screen.
+
+failure_classification:
+  left_edge: FAIL /ASSERTION
+  off_screen: FAIL /ASSERTION
+  missing: FAIL /ASSERTION
+  no_playwright: ENVIRONMENT /ENVIRONMENT
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+runner: checks/app-handedness.sh
+depends_on: []

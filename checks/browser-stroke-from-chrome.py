@@ -131,16 +131,22 @@ with sync_playwright() as p:
     dock = pg.evaluate("() => { const r = document.querySelector('.dock').getBoundingClientRect();"
                        " return {left: r.left, top: r.top, right: r.right, bottom: r.bottom}; }")
     out["dock_rect"] = dock
+    # THE DOCK MOVED TO THE RIGHT EDGE (owner, 2026-11-11: "eu sou canhoto. move o menu pra
+    # direita."), so the gesture now travels RIGHT-TO-LEFT: it starts on the strip just
+    # inside the dock and sweeps across the paper to the far edge. The gesture is the same
+    # one that used to die -- a stroke that begins over the chrome -- only mirrored, which is
+    # the point of a check written against a POSITION rather than a constant.
     start_y = int(dock["top"] + 4)          # the dock's own padding, above the first object
+    dock_x = int(dock["left"]) + 6
     out["start_point_is_paper"] = pg.evaluate(
         "([x, y]) => { const e = document.elementFromPoint(x, y); return e.id === 'pad'; }",
-        [int(dock["left"]) + 6, start_y])
+        [dock_x, start_y])
     if not out["start_point_is_paper"]:
         fail.append("HARNESS: the chosen start point is not on the dock's empty strip")
 
-    drag([(int(dock["left"]) + 6, start_y),
-          (60, start_y), (110, start_y), (160, start_y),
-          (210, start_y), (260, start_y), (310, start_y), (360, start_y)])
+    far = max(30, int(dock["left"]) - 300)
+    drag([(dock_x, start_y)] +
+         [(int(dock_x - (dock_x - far) * i / 7), start_y) for i in range(1, 8)])
     drawn = strokes(pg, want=1)
     out["strokes_after_drag_from_dock"] = len(drawn)
     if len(drawn) != 1:

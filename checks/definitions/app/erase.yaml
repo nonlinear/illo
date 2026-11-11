@@ -16,12 +16,18 @@ preconditions: ["extraction_succeeded"]
 
 execution:
   - action: extract_functions
-    args: {"names": ["distToSeg", "radiusFor", "eraseRadius", "strokeRadius", "eraseAt"]}
+    args: {"names": ["distToSeg", "radiusFor", "eraseRadius", "eraseAt"]}
   - action: run_cases
     args: {"file": ".erase-test.mjs"}
 
 assertion: >
-  10/10 cases pass: 7 topology (v1) + 3 metric (v2)
+  7/7 cases pass. The properties are: (1) the ink under the finger goes; (2) the ink the
+  finger never touched stays, to the point; (3) a stroke cut in two survives as two strokes;
+  (4) a one-point stub is dropped, not left as a speck; (5) the demo scribble is never ink;
+  (6) a miss says nothing; (7) the SAME touch on the SAME drawing gives the SAME answer,
+  three times. That last one is the owner's complaint stated as an assertion: the old
+  erase-to-intersection was right on a clean crossing and wrong on a line that merely came
+  close, which is a coin, not a tool.
 
 failure_classification:
   case_failed: FAIL /ASSERTION

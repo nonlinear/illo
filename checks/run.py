@@ -105,7 +105,14 @@ def run_check(c):
         return ("NOT RUN", "", "runner %s not found" % runner, "", 0)
     t0 = time.time()
     try:
-        p = subprocess.run(["bash", str(script), str(REPO)],
+        # THE RUNNER MUST KNOW WHY IT IS RUNNING. repo-clean-tree compares against the
+        # INDEX on a commit and against HEAD otherwise; it asks for the trigger as $2.
+        # run.py never passed it, so the check always took the HEAD branch -- and at
+        # pre-commit HEAD is stale by definition, so it failed every honest commit. Two
+        # sessions then committed with --no-verify to get past it, which means the battery
+        # did not run at all. A harness that forces itself to be disabled is not a harness;
+        # the argument was missing, and one word fixes it.
+        p = subprocess.run(["bash", str(script), str(REPO), TRIGGER],
                            capture_output=True, text=True, timeout=180)
     except subprocess.TimeoutExpired:
         return ("FAIL", "INFRASTRUCTURE", "timed out after 180s", "", 180000)

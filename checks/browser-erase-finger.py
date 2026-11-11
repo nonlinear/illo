@@ -82,9 +82,14 @@ def main():
         pg.evaluate("""() => { window.__f = []; const o = document.getElementById('flash');
           new MutationObserver(() => window.__f.push(o.textContent))
             .observe(o, {subtree: true, childList: true, characterData: true}); }""")
-        touch(cdp, [150, 300])
+        # A RUBBER ERASES WHAT IT PASSES OVER, so the gesture is a SWEEP, not a tap. The old
+        # version tapped once and read the window 120..160 as "the tap side of the line" --
+        # it passed because the rubber's own radius covers that window, which is a test that
+        # agrees with the product by coincidence. The claim being checked is "the ink the
+        # finger passed over is gone", and for that the finger has to pass over it.
+        touch(cdp, [(150, 300), (120, 300), (95, 300), (85, 300)], move=True)
 
-        left_after = ink_in(120, 294, 40, 12)
+        left_after = ink_in(90, 294, 40, 12)
         right_after = ink_in(240, 294, 40, 12)
         out["ink_left_after"] = left_after
         out["ink_right_after"] = right_after
@@ -113,10 +118,10 @@ def main():
     if out["ink_left_before"] < 20:
         fails.append("the setup line was never painted (%d px)" % out["ink_left_before"])
     if out["ink_left_after"] > out["ink_left_before"] * 0.2:
-        fails.append("the tap side of the line is still inked: %d px -> %d px"
+        fails.append("the ink the finger swept over is still there: %d px -> %d px"
                      % (out["ink_left_before"], out["ink_left_after"]))
     if out["ink_right_after"] < 20:
-        fails.append("the far side vanished too: the cut took the wrong side (%d px)" % out["ink_right_after"])
+        fails.append("the far side vanished too: the rubber ate past the finger (%d px)" % out["ink_right_after"])
     if not out["vertical_survives"]:
         fails.append("the crossing line was erased: the cut stole the far line")
     if out["notifications"]:
@@ -134,7 +139,7 @@ def main():
         for f in fails:
             print("- " + f)
         return 1
-    print("\nOK — a finger cuts the line at the crossing, the far side lives, and nothing is announced")
+    print("\nOK — a finger sweep removes the ink under it, the far side lives, and nothing is announced")
     return 0
 
 

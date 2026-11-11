@@ -3,11 +3,17 @@
 # The check answers "which property?", never "why now?" (that is the trigger).
 
 id: illo.app.reload
-version: 1.0.0
-predicate: reload_object_after_tools_saves_first
+version: 2.0.0
+predicate: reload_is_not_a_dock_object
 source: local_static
 target: dock in index.html
 lifecycle: active
+
+# v1.0.0 asserted the OPPOSITE: a toolReload object after the tools. It was added on
+# 2026-10-29 because the owner runs fullscreen on Android with no address bar. On 2026-11-11
+# he removed it himself -- "eu tiraria todos os outros functions. cor, reload. so teria pen,
+# eraser, undo, redo" -- so the property inverted. A check that keeps asserting a deleted
+# object fails on a correct repo, which is worse than no check (kin P09E092 §3.3).
 
 context:
   requires: ["index.html"]
@@ -16,20 +22,20 @@ preconditions: []
 
 execution:
   - action: locate
-    args: {"dock": "toolPen < toolEraser < toolPan < toolReload"}
-  - action: require
-    args: {"tokens": ["save()", "location.reload()"]}
+    args: {"dock": "toolPen · toolEraser · toolUndo · toolRedo, and nothing else"}
+  - action: forbid
+    args: {"tokens": ["toolReload"]}
 
 assertion: >
-  toolReload is a dock object after the tools, wired to reloadApp, which saves then reloads
+  The dock holds exactly pen, eraser, undo and redo. reloadApp() may exist for the laptop
+  keyboard, but there is no reload object on the surface.
 
 failure_classification:
   order: FAIL /ASSERTION
-  no_save: FAIL /ASSERTION
+  extra_object: FAIL /ASSERTION
 
 evidence:
   required: ["result.json", "stdout.log"]
 
-# implementation — the check CONTRACT is above; this is one way to satisfy it
 runner: checks/app-reload.sh
 depends_on: []
