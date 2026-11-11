@@ -1,0 +1,37 @@
+# Check: illo.app.pen-only
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.pen-only
+version: 3.0.0
+predicate: ink_gate_scoped_to_ink_and_precedes_capture
+source: local_static
+target: canvas pointerdown handler
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: []
+
+execution:
+  - action: locate
+    args: {"handler": "pointerdown", "order": "gate < capture < stroke"}
+  - action: forbid
+    args: {"tokens": ["state.tool !== 'pan'"]}
+  - action: require
+    args: {"tokens": ["state.tool === 'pen'"]}
+
+assertion: >
+  the pen gate precedes capture, precedes the stroke, and names ink only
+
+failure_classification:
+  order: FAIL /ASSERTION
+  unscoped: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-pen-only.sh
+depends_on: []

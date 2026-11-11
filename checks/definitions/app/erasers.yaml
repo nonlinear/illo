@@ -1,0 +1,37 @@
+# Check: illo.app.erasers
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.erasers
+version: 3.0.0
+predicate: one_eraser_and_it_is_a_rubber
+source: local_static
+target: index.html
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: []
+
+execution:
+  - action: forbid
+    args: {"tokens": ["strokeEraser", "strokeHit", "eraseToIntersection", "crossingsFor", "segHit"]}
+  - action: require
+    args: {"tokens": ["eraseAt", "strokeRadius"]}
+  - action: run_cases
+    args: {"file": ".erase-test.mjs", "mutation": "eraseAt returns false"}
+
+assertion: >
+  one erase path (eraseAt), the crossing engine is gone, the rubber covers the ink the
+  stroke paints (strokeRadius), and the suite can still FAIL when eraseAt is gutted
+
+failure_classification:
+  found: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-erasers.sh
+depends_on: []

@@ -39,7 +39,7 @@
   }
   [hidden] { display: none !important; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
-  button { font-family: inherit; cursor: pointer; }
+  button { font-family: inherit; cursor: pointer; touch-action: none; }
 
   #pad { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--paper); touch-action: none; cursor: crosshair; z-index: 0; }
 
@@ -67,15 +67,39 @@
 
   /* left tool dock */
   .dock { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); z-index: 10; display: flex; flex-direction: column; gap: 6px; padding: 8px; align-items: center; }
-  .tool { width: 42px; height: 42px; display: grid; place-items: center; border: 0; background: transparent; border-radius: 10px; color: #3F3F46; position: relative; }
+  /* A CONTROL KEEPS ITS OWN GESTURE. The dock sits on top of a full-screen paper, and the
+     browser decides who owns a touch by `touch-action` -- the ONLY signal that settles it.
+     The value `manipulation` (Chrome's own default for buttons) offers tap AND PAN, and since
+     nothing here scrolls, a horizontal slip of a thumb over a button is a pan that CANNOT
+     happen: the browser cancels the pointer. That is why a stroke that began on the dock
+     never reached the canvas at all, and why "erase to intersection" looked dead
+     (owner, 2026-10-29: "erase to intersection button does nothing. nothing.").
+     Measured on Chromium, drag starting on a dock button:
+       manipulation -> pointercancel    |  pan-y -> full move stream
+       pinch-zoom   -> full move stream |  none  -> full move stream
+     `pan-y` is not enough for a phone turned sideways (horizontal scroll is at stake then),
+     so the chrome takes `none` outright: these objects never scroll, and a control that
+     loses the pointer is a control that does nothing. The paper keeps `none` too -- it draws.
+     The old `.dock { pointer-events: none }` trick for the gaps between objects does not
+     hold on Safari; pointer-events is per-object instead and the gaps fall through. */
+  .dock, .dock .tool, .dock .swatch, .help-fab, .help-panel { touch-action: none; }
+  #pad { touch-action: none; }
+  .dock > * { pointer-events: auto; }
+  .dock { pointer-events: none; }
+  /* A CHOSEN TOOL IS LOUD. The active state used to be a lavender wash on the SAME near-black
+     glyph -- at 42px on a phone, against a white panel, that is a state the eye does not
+     report. Black key, white glyph: the state is legible before it is pretty. */
+  .tool { width: 42px; height: 42px; display: grid; place-items: center; border: 0; background: transparent; border-radius: 10px; color: #3F3F46; position: relative; touch-action: none; }
   .tool svg { width: 21px; height: 21px; }
   .tool:hover { background: var(--bg); }
-  .tool.active { background: var(--primary-soft); color: var(--primary); }
+  .tool.active { background: var(--text); color: #FFFFFF; box-shadow: var(--shadow-sm); }
   .tool .kbd { position: absolute; bottom: 2px; right: 4px; font-size: 10px; font-weight: 600; color: var(--muted); }
-  .tool.active .kbd { color: var(--primary); }
+  .tool.active .kbd { color: #FFFFFF; opacity: .75; }
   .dock .divider { width: 26px; height: 1px; background: var(--border); margin: 2px 0; }
   /* the size dot doubles as the read-out: no slider, no popover */
   .tool .dot { display: block; background: currentColor; border-radius: 50%; }
+  /* an unavailable object must LOOK unavailable, not go quiet when pressed */
+  .tool[aria-disabled="true"] { opacity: .35; }
 
   .swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; }
@@ -110,25 +134,30 @@
   <canvas id="pad" aria-label="Sketch canvas. Draw with a mouse, finger or stylus."></canvas>
 
   <div class="dock panel" aria-label="Tools">
-    <button class="tool" id="toolPen" data-tool="pen" title="Ink (P)" aria-label="Ink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg><span class="kbd">P</span></button>
-    <button class="tool" id="toolEraser" data-tool="eraser" title="Erase — tap a line, it cuts to the nearest crossing on each side (E)" aria-label="Erase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4L13 4.9a2 2 0 0 1 2.8 0l4.3 4.3a2 2 0 0 1 0 2.8L13 19"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg><span class="kbd">E</span></button>
-    <button class="tool" id="toolPan" data-tool="pan" title="Pan / move the canvas (H or hold Space)" aria-label="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span class="kbd">H</span></button>
-    <button class="tool" id="toolSize" title="Size (S) · [ ] smaller / bigger" aria-label="Size"><span class="dot" id="sizeDot" style="width:6px;height:6px"></span><span class="kbd">S</span></button>
-    <button class="tool" id="toolReload" title="Reload the page (R)" aria-label="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="kbd">R</span></button>
+    <button class="tool" id="toolPen" data-tool="pen" title="Ink — draw (P)" aria-label="Ink"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2.6 18.4 9 8.6 18.8 3.2 20.4 4.8 15Z"/><path d="M12 2.6 4.8 15l4.2 4.2L18.4 9Z" fill="none" stroke="#FFF" stroke-width="1.1"/></svg><span class="kbd">P</span></button>
+    <button class="tool" id="toolEraser" data-tool="eraser" title="Erase — drag over ink and it goes (E)" aria-label="Erase"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M8.2 20.5 3.6 15.9a1.6 1.6 0 0 1 0-2.3l9.4-9.4a1.6 1.6 0 0 1 2.3 0l4.6 4.6a1.6 1.6 0 0 1 0 2.3l-9.4 9.4Z"/><path d="M8.6 8.6 15.4 15.4" fill="none" stroke="#FFF" stroke-width="1.6"/><path d="M8.2 20.5H21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="kbd">E</span></button>
     <div class="divider"></div>
-    <div class="swatches" id="swatches"></div>
+    <!-- TWO OBJECTS THAT LOOK DIFFERENT WHEN THEY CANNOT ACT (owner, 2026-11-11:
+         "so paralisa quando muda pra erase"). Measured on the 2026-11-11 build: choose Erase,
+         drag on the paper, and NOTHING on screen changes -- not a row of ink, not one pixel of
+         the dock. The tool DID change; the app just never said so, and pen and eraser shipped
+         the same near-black glyph on the same transparent panel. A tool the hand pressed and
+         the eye cannot see is the same as a tool that did not change. So pen and eraser are
+         different SHAPES (nib vs block) and a chosen tool is a filled black key. -->
+    <button class="tool" id="toolUndo" title="Undo (Cmd+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="tool" id="toolRedo" title="Redo (Cmd+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
   </div>
 
   <button class="help-fab" id="helpFab" title="Help & shortcuts" aria-label="Help" aria-haspopup="dialog" aria-controls="helpPanel" aria-expanded="false">?</button>
   <div class="help-panel panel" id="helpPanel" role="dialog" aria-modal="false" aria-labelledby="helpTitle" tabindex="-1" hidden>
     <h3 id="helpTitle">Sketching & shortcuts</h3>
     <dl>
-      <dt><kbd>P</kbd></dt><dd>Ink (pressure-sensitive with a stylus)</dd>
-      <dt><kbd>E</kbd></dt><dd>Erase — cut to the crossing on each side</dd>
+      <dt><kbd>P</kbd></dt><dd>Ink — draw (pressure-sensitive with a stylus)</dd>
+      <dt><kbd>E</kbd></dt><dd>Erase — drag over ink, and it goes</dd>
       <dt><kbd>S</kbd></dt><dd>Size · <kbd>[</kbd> <kbd>]</kbd> smaller / bigger</dd>
       <dt><kbd>H</kbd> / <kbd>Space</kbd></dt><dd>Pan · wheel or pinch to zoom</dd>
       <dt><kbd>R</kbd></dt><dd>Reload the page (saves first)</dd>
-      <dt><kbd>⌘Z</kbd></dt><dd>Undo · <kbd>⌘⇧Z</kbd> redo</dd>
+      <dt>undo / redo / clear</dt><dd>In the dock, under the reload object</dd>
     </dl>
     <div class="foot">Your drawing is saved in this browser. Save the page to keep a copy you own.<br><br>A tool by <a href="https://nonlinearstudio.org" target="_blank" rel="noopener">Nonlinear Studio</a>.</div>
   </div>
@@ -148,8 +177,21 @@
   const ctx = canvas.getContext('2d');
   const STORE = 'offline-sketch-v1';   // kept on purpose: renaming orphans saved drawings (migration is its own decision)
 
-  const COLORS = ['#18181B', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#7C3AED', '#EC4899'];
+  // ONE COLOUR. The dock has no swatches (owner, 2026-11-11), so the app does not carry a
+  // palette it cannot offer. state.color stays because the format stores it per stroke.
+  const COLORS = ['#18181B'];
   let state = { strokes: [], tool: 'pen', color: '#18181B', size: 6 };
+  // INK_IS_PEN (owner, 2026-10-27): "não dava pra desenhar sem caneta." Set from the
+  // dock's pen/eraser objects -- choosing a TOOL is the opt-in, not the pointer type.
+  // Read the failure that produced this flag: the gate used to test e.pointerType, and
+  // the stylus is not the only device that reports `touch` (an S Pen reports `pen`; an
+  // Oppo in some browsers does not). Keying on the pointer locked the owner out of his
+  // own drawing with a tool already selected, and announced the refusal instead of drawing.
+  // inkIsPen is retired as a GATE (2026-10-29): it said "the pen object is chosen" and was
+  // read as "only a stylus may draw", which locked the finger out of the paper after one tap
+  // on the pen object, and persisted that lock across reloads. Kept as a declaration for the
+  // saved-file schema so old drawings still load; nothing reads it to decide ink.
+  let inkIsPen = false;
   let history = [], hIndex = -1;
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let drawing = null;     // current stroke being drawn
@@ -165,7 +207,14 @@
     canvas.style.height = window.innerHeight + 'px';
     redrawAll();
   }
-  function clearCanvas() { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, window.innerWidth, window.innerHeight); }
+  // CLEARING IS NOT A DRAW, SO IT MUST NOT LEAVE A DRAWING MATRIX BEHIND. This used to set the
+  // world matrix (camera.zoom*dpr, camera.x, camera.y) and clear -- and a clearRect is bound by
+  // the CURRENT transform, so with the camera panned `x*dpr` right, the clear covered
+  // [-x, innerWidth - x] of DEVICE space and the band [innerWidth-x, innerWidth] was never
+  // painted: the left edge of the paper kept the old ink after every redraw, wider with zoom.
+  // Two objects share one canvas and one matrix; the clear owns the matrix while it runs and
+  // hands it back as IDENTITY, so every draw re-establishes its own via applyWorldTransform().
+  function clearCanvas() { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); }
   // Pressure curve. EXP=1 -> old linear (0.4..1.0). EXP>1 -> soft touches stay thin,
   // and a SMALL pressure increase already doubles thickness. MW-ERPFIT: mouse/finger
   // report a constant 0.5 -- remapped to 1.0 so they keep full-width strokes.
@@ -222,18 +271,68 @@
   function redrawAll() { clearCanvas(); for (const s of state.strokes) drawStroke(s); }
 
   // ---------- pointer input ----------
-  let activeId = null, activeType = null, panning = null;
+  // The paper listens on the DOCUMENT, in the capture phase, so a gesture is its own from the
+  // first pointerdown no matter what floats above the paper. A listener on <canvas> only
+  // sees gestures that START on the canvas, and the chrome is on top of the canvas.
+  let activeId = null, activeType = null, panning = null, captured = false;
+  // WHEN DID THE PEN LAST SPEAK. A stylus on glass emits pointermove continuously, so a pen
+  // gesture with no event for PEN_STALE_MS is not drawing any more -- its pointerup went to
+  // /dev/null. This is the clock that lets palm rejection expire instead of latching.
+  const PEN_STALE_MS = 1200;
+  let penSeenAt = 0;
+  function penIsLive() { return penSeenAt !== 0 && (Date.now() - penSeenAt) < PEN_STALE_MS; }
+  // The chrome floating over the paper. A gesture that starts on one of these is drawn (a
+  // thumb meant to draw), AND the object still gets its tap if the pointer never travels --
+  // a tap has no movement, so drawing it leaves no mark and the tap can be replayed.
+  const chrome = () => [document.querySelector('.dock'), document.getElementById('helpFab'), document.getElementById('helpPanel')].filter(Boolean);
+  const isChrome = (t) => chrome().some(el => el.contains(t));
+  let chromeTap = null, chromeTravel = 0;
+  function armChrome(e) {
+    chromeTravel = 0;
+    chromeTap = { x: e.clientX, y: e.clientY, target: e.target };
+    // If the finger landed ON a button, the browser will dispatch that button's click itself
+    // when the pointer lifts. Say so, so settleChrome() does not replay it a second time.
+    const btn = e.target.closest ? e.target.closest('button') : null;
+    if (btn) btn.dataset.browserWillClick = '1';
+  }
+  // A TAP ON THE CHROME FIRES ITS OBJECT ONCE.
+  //
+  // The dock is a real <button>, so the browser fires `click` on pointerup all by itself.
+  // On top of that, the paper listens on the document, so a gesture that began over the
+  // dock also reaches armChrome() and is REPLAYED here with btn.click(). For Pen and Erase
+  // the double fire was invisible: setTool() is idempotent, and setting the same tool twice
+  // is setting it once. For Undo it was not: `settle:toolUndo` then `undo` twice rolled the
+  // history back TWO steps, so Undo from an erased line landed on the empty page instead of
+  // the line, and Redo from there did nothing. Measured 2026-11-11 with the click order
+  // ['settle:toolUndo','undo','undo'].
+  //
+  // The fix is that the two paths must not both act. `chromeHandled` marks a button that the
+  // browser is about to click on its own (it was tapped directly), so the replay stays out.
+  // A gesture that began OFF the button still replays, because the browser will never fire
+  // that click -- which is the case the replay exists for.
+  function settleChrome() {
+    const tap = chromeTap; chromeTap = null;
+    // TRAVEL, not duration: a slow press that stays put is still a tap.
+    if (!tap || chromeTravel > 8) return;
+    // The target is whatever the finger met -- an <svg>, a <span class="kbd">, the panel. The
+    // OBJECT the owner meant is the nearest button; the panel itself is not a button and a
+    // tap in the gap between two objects does nothing, which is what a gap should do.
+    const btn = tap.target.closest ? tap.target.closest('button') : null;
+    if (!btn || btn.disabled) return;
+    if (btn.dataset.browserWillClick === '1') { delete btn.dataset.browserWillClick; return; }
+    btn.click();
+  }
   let camera = { x: 0, y: 0, zoom: 1 }, spaceHeld = false, gesture = null;
   const pointers = new Map();
   function applyWorldTransform() { ctx.setTransform(camera.zoom * dpr, 0, 0, camera.zoom * dpr, camera.x * dpr, camera.y * dpr); }
   function screenXY(e) { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
   function clampZoom(z) { return Math.max(0.1, Math.min(8, z)); }
   function zoomAt(sx, sy, factor) { const nz = clampZoom(camera.zoom * factor), f = nz / camera.zoom; camera.x = sx - (sx - camera.x) * f; camera.y = sy - (sy - camera.y) * f; camera.zoom = nz; updateZoomLabel(); }
-  function setCursor() { canvas.style.cursor = (spaceHeld || state.tool === 'pan') ? 'grab' : state.tool === 'eraser' ? 'cell' : 'crosshair'; }
+  function setCursor() { canvas.style.cursor = spaceHeld ? 'grab' : state.tool === 'eraser' ? 'cell' : 'crosshair'; }
   function updateZoomLabel() { /* no zoom read-out on screen: zoom is a gesture, not a value to read */ }
   function gMetrics() { const v = [...pointers.values()], a = v[0], b = v[1]; return { mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1 }; }
   function updateGesture() { if (pointers.size < 2) return; const m = gMetrics(); camera.x += m.mx - gesture.mx; camera.y += m.my - gesture.my; zoomAt(m.mx, m.my, m.d / gesture.d); gesture = { mx: m.mx, my: m.my, d: m.d }; redrawAll(); scheduleSave(); }
-  function abortDrawing() { drawing = null; erasing = false; erasedAny = false; if (activeId !== null) { try { canvas.releasePointerCapture(activeId); } catch (err) {} } activeId = null; activeType = null; redrawAll(); }
+  function abortDrawing() { drawing = null; erasing = false; erasedAny = false; if (activeId !== null) { try { canvas.releasePointerCapture(activeId); } catch (err) {} } activeId = null; activeType = null; captured = false; redrawAll(); }
   function pt(e) {
     const r = canvas.getBoundingClientRect();
     // MOUSE/FINGER: they report a constant 0.5, which is the MIDDLE of the pressure
@@ -246,28 +345,104 @@
     const wx = (e.clientX - r.left - camera.x) / camera.zoom, wy = (e.clientY - r.top - camera.y) / camera.zoom;
     return [+wx.toFixed(2), +wy.toFixed(2), +Math.max(0.05, Math.min(1, p)).toFixed(3)];
   }
-  canvas.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'touch' && activeId !== null && activeType === 'pen') return; // palm rejection while pen draws
+  document.addEventListener('pointerdown', (e) => {
+    // PALM REJECTION REJECTS MARKS, NOT TAPS -- AND IT MUST BE ABLE TO EXPIRE.
+    //
+    // This gate used to be the first statement in the handler:
+    //     if (e.pointerType === 'touch' && activeId !== null && activeType === 'pen') return;
+    // Palm rejection, correct for a STROKE: while the pen draws, a resting palm must not mark.
+    // But it read `activeId`, and `activeId` is only cleared by endStroke(). Android does not
+    // always deliver that pointerup to the page -- a pointercancel, palm rejection by the OS,
+    // a focus change, a system gesture -- and when it does not, `activeId` is NEVER cleared.
+    // From that moment every finger tap hits this `return` and is discarded in silence (the
+    // gate is silent by instruction). The app is not frozen: dock, paper and drawing are all
+    // there, and it is DEAF. Owner, 2026-11-11: "paralisa depois de trocar de tool." -- the
+    // tool change is simply the first gesture that reveals the stuck state.
+    //
+    // Two changes, and both are needed:
+    //   1. THE CHROME IS NOT THE PAPER. A tap on the dock is a command, not a mark. It is
+    //      armed and replayed like any other tap. Only the MARK is refused.
+    //   2. THE GATE HAS AN AGE. A pen gesture that has shown no event for PEN_STALE_MS cannot
+    //      still be drawing -- a stylus resting on glass emits moves continuously -- so a
+    //      gesture that old is dead and the state it holds is cleared. Palm rejection that can
+    //      outlive the palm is not rejection, it is a latch.
+    const palmHolds = e.pointerType === 'touch' && activeId !== null && activeType === 'pen';
+    if (palmHolds && !penIsLive()) {
+      // The pen's gesture is stale: the pointerup was lost. Release it instead of latching.
+      abortDrawing();
+      activeId = null; activeType = null; panning = null; erasing = false; erasedAny = false;
+      pointers.clear(); gesture = null; drawing = null;
+    } else if (palmHolds) {
+      if (e.target !== canvas && isChrome(e.target)) { armChrome(e); if (document.activeElement && isChrome(document.activeElement)) document.activeElement.blur(); }
+      return; // palm rejection while the pen genuinely draws
+    }
+    // A STROKE MAY BEGIN ON THE CHROME. The dock and the help button float on top of the
+    // paper, and the browser decides who owns a touch from the FOREGROUND element -- so a
+    // finger that lands on a dock gap, or slides off a button, sends its whole gesture to
+    // the dock and the paper never hears about it. That is one of the ways "erase to
+    // intersection" read as dead. The paper listens on the document, not on itself, so a
+    // gesture that starts over the chrome is drawn exactly like any other. The dock reacts
+    // to the same tap through a debounce (armChrome()), so a tap on an object still taps it.
+    if (e.target !== canvas && !isChrome(e.target)) return;
+    // A GESTURE OFF THE CHROME IS DRAWN, AND ITS TAP IS REPLAYED -- but ONLY on a tap. A
+    // `click()` from a replayed tap does not move focus, so a focused dock object keeps it
+    // and the NEXT SPACE press or ENTER activates it again. That is the phantom second tap
+    // that was invented here on 2026-10-29: a gesture meant to draw a line instead found the
+    // tool already switched. The object is blurred before it is clicked, so nothing survives
+    // the gesture that fired it.
+    if (e.target !== canvas) { armChrome(e); if (document.activeElement && isChrome(document.activeElement)) document.activeElement.blur(); }
+    // WHAT MAY ACT. The gate used to swallow the whole pointerdown, which is correct for a
+    // stroke and wrong for the chrome: a finger tapping Erase while the Pen object was
+    // selected was refused as "a pointer that may not ink" -- the app consumed the tap that
+    // would have changed the tool, so the tool looked broken (found by
+    // illo.app.stroke-from-chrome, 2026-10-29). SPECIFICATION BEFORE ARRIVAL: the tool is
+    // decided first; only then does the object decide what to do with the pointer.
+    if (state.tool === 'pen' && !mayInk(e)) {
+      // ZERO NOTIFICATIONS (owner, 2026-10-29 19:27): "still warning if click with finger.
+      // ZERO notifications. you don't need to announce an inaction."
+      // A pointer that may not ink does NOTHING. It used to flash a sentence explaining
+      // its own refusal -- "the pen object is on, the eraser or pan takes a finger" -- which
+      // announces the no-op instead of performing the action. The gate is now silent: the
+      // app either acts or stays still, and only a real outcome (a cut, a clear, a cut
+      // refused because it was too close to the end) gets a word.
+      // The arrangement is still released, or a refused tap would stay latched: a chrome tap
+      // replays itself now (settleChrome), and a paper tap has nothing to draw.
+      settleChrome(); neutraliseAfterTap(); return;
+    }
+    if (e.pointerType === 'pen') penSeenAt = Date.now();
     pointers.set(e.pointerId, screenXY(e));
     if (pointers.size === 2) { abortDrawing(); gesture = gMetrics(); return; } // two-finger pan + pinch zoom
     if (pointers.size > 2 || activeId !== null) return;
     if (e.button !== 0 && e.button !== 1 && e.pointerType === 'mouse') return;
-    // PEN ONLY (owner, 2026-10-27): "não dava pra desenhar sem caneta. agora pode. não deveria."
-    // A mouse or a finger may pan, zoom, erase and pick tools -- it may NOT lay ink.
-    // The stroke records pressure as [x, y, p]; a device that cannot report pressure
-    // cannot make a true illo line (epic illo-line-vs-brush), so it does not draw one.
-    // Placed BEFORE setPointerCapture: capture on a non-pen would leave the mouse
-    // holding the pointer, and every later pointermove would be retargeted to canvas.
-    // The gate is on INK, not on the pointer (bug fixed 2026-10-29): it used to read
-    // `state.tool !== 'pan'`, which is true for the eraser, so a mouse or a finger on
-    // the erase button got a silent `return` -- the button did nothing at all. Erase
-    // writes no ink; it only cuts geometry, so the pen requirement does not apply.
-    const gatesInk = state.tool === 'pen';
-    if (gatesInk && e.pointerType !== 'pen') { flash('Ink needs the stylus'); return; }
     e.preventDefault();
-    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    // NO CAPTURE HERE. Capturing on POINTERDOWN is what made the eraser (and the pen, and
+    // the pan) look dead on the device (owner, 2026-10-29: "erase to intersection button does
+    // nothing. nothing."). A tap on the dock panel fires pointerdown on a <button>; the
+    // button is touch-action:auto and is not a touch target, so the browser waits to see if
+    // the gesture is a scroll, and it DELIVERS NO pointermove for the first ~15-25px. The
+    // first events that do arrive land on the DOCK: the finger has slid off the button onto
+    // the panel, and there pointerup/CANCEL is dispatched at the canvas -- and any
+    // setPointerCapture pending on that element is dropped with the element's hit path, so
+    // the whole gesture vanished. The canvas never saw one event.
+    // Capture belongs where the pointer is already OWNED, not to an element that may be
+    // replaced mid-gesture. On pointermove the canvas has preventDefault'ed, the browser's
+    // gesture is cancelled, and a <button> under the finger can no longer activate or be
+    // swapped: that is the first moment the element can be trusted to hold the pointer.
     activeId = e.pointerId; activeType = e.pointerType;
-    if (spaceHeld || state.tool === 'pan' || e.button === 1) { panning = { sx: e.clientX, sy: e.clientY, cx: camera.x, cy: camera.y }; canvas.style.cursor = 'grabbing'; return; }
+    // PAN IS AN OBJECT, AND ONLY THE PAN OBJECT PANS ON A DRAG. The owner's report was
+    // "can't pan ... can't draw": the pan object existed, he chose it, and a finger on the
+    // paper still did nothing, because the branch was keyed on e.button===1 -- a
+    // keyboard-era middle-button on a keyboard-less device. A finger is button 0.
+    // The tempting fix is "touch always pans", and it is wrong: it fixes panning by
+    // breaking drawing, since a finger drag on the pen object IS a line. One object, one
+    // behaviour -- the same rule that removed the second eraser.
+    // Middle-drag and Space still pan from anywhere: those are keyboard/mouse gestures
+    // that cannot collide with drawing.
+    // PAN IS A KEYBOARD/LAPTOP AFFORDANCE NOW. The dock has no pan object (owner,
+    // 2026-11-11), so panning is space-drag or the middle button -- never a tool state.
+    const dragPans = spaceHeld || e.button === 1;
+    if (dragPans) { panning = { sx: e.clientX, sy: e.clientY, cx: camera.x, cy: camera.y }; canvas.style.cursor = 'grabbing'; return; }
+
     // Erase IS erase-to-intersection (owner, 2026-10-28): "tem erase mas não eh erase to
     // intersection. tocou, deleta toda linha até intercessão." There used to be two
     // erasers -- a pixel eraser and a whole-stroke eraser -- and neither was the action
@@ -276,21 +451,43 @@
     // ONE undo step for it.
     if (state.tool === 'eraser') {
       erasing = true; erasedAny = false;
-      eraseToIntersection(pt(e));
+      eraseAt(pt(e));
       return;
     }
-    drawing = { tool: state.tool, color: state.color, size: state.size, pts: [pt(e)] };
+    drawing = { tool: state.tool, color: state.color, size: state.size, pts: [pt(e)], fromChrome: e.target !== canvas };
     drawStroke(drawing);
   });
-  canvas.addEventListener('pointermove', (e) => {
+  function handleMove(e) {
+    // THE PEN KEEPS ITS OWN CLOCK. Every event from a live stylus proves it is still on the
+    // glass; a gap longer than PEN_STALE_MS proves its pointerup was lost. Read by the palm
+    // gate, which must expire instead of latching (owner, 2026-11-11: "paralisa depois de
+    // trocar de tool" -- the pointerup never arrived and `activeId` stayed set forever).
+    if (e.pointerType === 'pen') penSeenAt = Date.now();
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, screenXY(e));
     if (gesture && pointers.size >= 2) { e.preventDefault(); updateGesture(); return; }
     if (e.pointerId !== activeId) return;
     e.preventDefault();
+    if (chromeTap) chromeTravel = Math.max(chromeTravel, Math.hypot(e.clientX - chromeTap.x, e.clientY - chromeTap.y));
+    // The pointer is owned from here on: the browser's gesture is cancelled and the finger
+    // can travel off the canvas without taking the gesture with it (drawing this time, not
+    // the hit path deciding).
+    if (!captured) { captured = true; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
     if (panning) { camera.x = panning.cx + (e.clientX - panning.sx); camera.y = panning.cy + (e.clientY - panning.sy); redrawAll(); scheduleSave(); return; }
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     const list = events.length ? events : [e];
-    if (erasing) { for (const ev of list) eraseToIntersection(pt(ev)); return; }
+    // CREATE-UNTIL-DECIDED, NOT MOVE-UNTIL-DECIDED. A touch gesture is a CREATION and the
+    // browser says so only on the first MOVE. Until it does, every move before it is withheld,
+    // and CDP-simulated contacts (and some real mobile stacks) deliver no pointerdown at a
+    // contact that never moved -- so `activeId` can still be null here on the very first move
+    // the app ever receives, and the old `e.pointerId !== activeId` guard returned EARLY:
+    // the erase was never called, and the undo first frame that decides a cut for a real thumb
+    // never decided anything. That is the same family as "the button does nothing": the
+    // action was correct, and the event never arrived. The first move that finds no owner
+    // adopts the pointer; "is this a second pointer" is already answered above by pointers.size.
+    if (activeId === null) { activeId = e.pointerId; activeType = e.pointerType; }
+    // ONE GESTURE, ONE HISTORY STEP. Every coalesced event erases (a drag is a drag),
+    // and endStroke pushes history once if anything was touched.
+    if (erasing) { for (const ev of list) eraseAt(pt(ev)); return; }
     if (!drawing) return;
     for (const ev of list) {
       const p = pt(ev), last = drawing.pts[drawing.pts.length - 1];
@@ -298,351 +495,182 @@
       drawing.pts.push(p);
       stampSegment(last, p, drawing.color, drawing.size, drawing.tool === 'eraser');
     }
-  });
+  }
   function endStroke(e) {
     pointers.delete(e.pointerId);
     if (gesture && pointers.size < 2) gesture = null;
-    if (e.pointerId !== activeId) return;
-    try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    // A CHROME TAP ENDS ITS OWN GESTURE. This `return` is right for a stroke -- the finger is
+    // not the owner of the pen's gesture -- but a tap on the dock is not a stroke, and while
+    // the pen rests on the glass `activeId` belongs to the PEN, so the finger's pointerup
+    // failed this guard and `settleChrome()` never ran: the tap stayed armed forever and the
+    // tool never changed. Arming a tap somewhere it can never be settled is the same as not
+    // arming it. Settle it here, then leave the pen's gesture alone.
+    if (e.pointerId !== activeId) { if (chromeTap && chromeTravel <= 8) settleChrome(); else chromeTap = null; return; }
+    if (captured) { captured = false; try { canvas.releasePointerCapture(e.pointerId); } catch (err) {} }
 
     activeId = null; activeType = null;
+    settleChrome();
     if (panning) { panning = null; setCursor(); scheduleSave(); return; }
-    if (erasing) { erasing = false; if (erasedAny) pushHistory(); erasedAny = false; drawing = null; return; }
+    if (erasing) {
+      // ONE GESTURE, ONE UNDO STEP. The erase mutates state.strokes directly (eraseAt), so
+      // nothing else will record it: this is the only push. It must happen AFTER the last
+      // eraseAt of the gesture, which is why it lives here and not in eraseAt.
+      erasing = false;
+      if (erasedAny) { pushHistory(); } else { updateUndo(); }
+      erasedAny = false; drawing = null; scheduleSave();
+      return;
+    }
+    // A TAP IS A TAP, NOT A MARK. A gesture that began on the chrome and never travelled is a
+    // tap on that object (settleChrome replays it), and replaying a tap must not leave a dot
+    // behind: a single point is what the finger touched, not something it drew. One point
+    // only -- a stroke that moved is a line and is kept.
+    if (drawing && drawing.fromChrome && drawing.pts.length === 1) { drawing = null; return; }
     if (drawing && drawing.pts.length) { state.strokes.push(drawing); pushHistory(); }
     drawing = null;
   }
-  // ---------- erase to intersection (the whole erase, and the whole of it) ----------
-  // Semantics (owner, 2026-10-25): tap a line. Find the intersection with another line
-  // that is CLOSEST TO THE TAP. Delete everything on the TAP SIDE of that intersection.
-  // If a straight line crosses a curved one, the tap side can be the MIDDLE -- then the
-  // middle is deleted and the two ends survive as two independent strokes. No splitOf,
-  // no line groups, no eraser strokes in state. The whole cut is ONE undo step.
-  const SEG_MIN = 0.5;       // ignore near-degenerate segments
-  const SEG_EPS = 0.5;       // world units; hit is snapped just past the crossing
+  // ---------- geometry the ERASER still needs (and nothing else) ----------
+  // The old "erase to intersection" lived here: crossings, axis matching, better-tap
+  // scoring, region deletion, in-place cuts. All of it is gone (owner, 2026-11-11) because
+  // it made the eraser a coin -- it cut on a clean crossing, did nothing when two lines
+  // merely came close, and guessed a side on a junction. What survives is the one primitive
+  // a rubber actually needs: the distance from a point to a segment.
 
   function distToSeg(px, py, ax, ay, bx, by) {
     const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
     let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t));
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-  }
-
-  function segHit(a, b, x, y) {
-    // Tolerance must scale with the drawn width, and a[2]/b[2] are PRESSURE (0.05..1),
-    // not a radius: the old form was a constant +-10 world units, so a tap 5px from a line
-    // still counted. Two strokes were then equidistant from the tap, the 1px tolerance in
-    // betterTap() called it a tie, and the tie-break picked the LONGER one -- so a tap on a
-    // horizontal line could erase a nearby vertical one. Radius in world units, plus a
-    // 2px slop at the current zoom so a fingertip still lands.
-    const r = Math.max(radiusFor(state.size, a[2] || 1), radiusFor(state.size, b[2] || 1));
-    const tol = r + 2 / camera.zoom;
-    return distToSeg(x, y, a[0], a[1], b[0], b[1]) <= tol;
-  }
-
-  // Segment-segment intersection on the CENTER LINE. Returns [t,u] params in (0,1) or null.
-  // Parametric form, Cross product, degenerate determinant => parallel/collinear => no cut.
-  // Segment/segment intersection, VERTEX-TOLERANT.
-  // Freehand strokes put a vertex exactly on the crossing all the time, so a strict
-  // open-interval test (t in (0,1) and u in (0,1)) misses the most common case.
-  // We allow the intersection to land on either segment's END, and we report whether
-  // it did, so the caller can decide if that end is a real crossing or just a butt joint.
-  function segIntersect(a, b, c, d) {
-    const r1x = b[0] - a[0], r1y = b[1] - a[1];
-    const r2x = d[0] - c[0], r2y = d[1] - c[1];
-    const den = r1x * r2y - r1y * r2x;
-    const EPS = 1e-9;
-    if (Math.abs(den) < EPS) return null;
-    const dx = c[0] - a[0], dy = c[1] - a[1];
-    const t = (dx * r2y - dy * r2x) / den;
-    const u = (dx * r1y - dy * r1x) / den;
-    const inT = t > -EPS && t < 1 + EPS;
-    const inU = u > -EPS && u < 1 + EPS;
-    if (!inT || !inU) return null;
-    // Snap to the exact interval so a vertex hit reports clean 0 or 1.
-    return [Math.max(0, Math.min(1, t)), Math.max(0, Math.min(1, u))];
-  }
-
-  // All center-line crossings between stroke si and every other stroke.
-  // Returns [{t, x, y}] where t is the position along si (segment i + local t, normalized).
-  function crossingsFor(si, strokes) {
-    const s = strokes[si], out = [];
-    if (!s || s.pts.length < 2) return out;
-    const total = s.pts.length - 1;
-    for (let i = 1; i < s.pts.length; i++) {
-      const a = s.pts[i - 1], b = s.pts[i];
-      if (Math.hypot(b[0] - a[0], b[1] - a[1]) < SEG_MIN) continue;
-      for (let j = 0; j < strokes.length; j++) {
-        if (j === si) continue;
-        const o = strokes[j];
-        // _welcome is a demo scribble, not part of the drawing: it must never be a
-        // cutting edge. Without this, the first cut of a fresh session stops at a
-        // crossing that does not exist.
-        if (!o || o._welcome || o.tool === 'eraser' || o.pts.length < 2) continue;
-        for (let k = 1; k < o.pts.length; k++) {
-          const c = o.pts[k - 1], d = o.pts[k];
-          if (Math.hypot(d[0] - c[0], d[1] - c[1]) < SEG_MIN) continue;
-          const hit = segIntersect(a, b, c, d);
-          if (!hit) continue;
-          const t = hit[0];
-          const ct = (i - 1 + t) / total;
-          // A crossing lands on the shared vertex of two consecutive segments of the OTHER
-          // stroke, so the same point is reported twice (four times in a junction). One
-          // crossing must appear once -- duplicated crossings corrupted the bracket and the
-          // crossing count that breaks ties.
-          if (out.some(o => Math.abs(o.t - ct) < 1e-6)) continue;
-          out.push({ t: ct, x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t });
-        }
-      }
-    }
-    return out;
-  }
-
-  // Split a stroke's points at normalized parameter t. Returns two point arrays.
-  // The crossing point is INSERTED in both halves so the cut edge is exact, and each
-  // half is nudged SEG_EPS away so the halves do not share a pixel with the other line.
-  // Returns null when the crossing lands on an END (nothing would be removed).
-  function splitPointsAt(pts, t) {
-    const total = pts.length - 1;
-    let f = t * total, i = Math.floor(f);
-    if (i >= total) i = total - 1;
-    if (i < 0) i = 0;
-    const local = f - i;
-    if (local < 1e-6 && i === 0) return null;
-    if (local > 1 - 1e-6 && i + 1 >= total) return null;
-    const a = pts[i], b = pts[i + 1];
-    const cx = a[0] + (b[0] - a[0]) * local, cy = a[1] + (b[1] - a[1]) * local;
-    const p = a[2] + (b[2] - a[2]) * local;
-    const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-    const ux = (b[0] - a[0]) / segLen, uy = (b[1] - a[1]) / segLen;
-    const head = pts.slice(0, i + 1).concat([[cx - ux * SEG_EPS, cy - uy * SEG_EPS, p]]);
-    const tail = [[cx + ux * SEG_EPS, cy + uy * SEG_EPS, p]].concat(pts.slice(i + 1));
-    return [head, tail];
-  }
-
-  // Cut stroke at its CURRENT index on ONE crossing.
-  // keepHead=true  -> stroke becomes [0,t), and the tail (t,1] is DISCARDED.
-  // keepHead=false -> stroke becomes (t,1], and the head [0,t) is DISCARDED.
-  // Exactly one piece survives, in place, so identity and z-order are preserved and the
-  // number of strokes changes only by what the caller adds back.
-  // Returns true when a cut happened, false on a degenerate/end crossing.
-  function cutInPlace(si, crossing, keepHead) {
-    const s = state.strokes[si];
-    if (!s) return false;
-    const pieces = splitPointsAt(s.pts, crossing.t);
-    if (!pieces) return false;
-    s.pts = keepHead ? pieces[0] : pieces[1];
-    return true;
-  }
-
-  // Delete the region of stroke si between fromT and toT (normalized params) -- the TAPPED
-  // side. The trick is that deleting can leave up to TWO survivors (both ends), so we cut
-  // the far edge first and KEEP its piece as a new independent stroke, then cut the near
-  // edge in place. No splitOf, no line groups: the survivors are just strokes.
-  function deleteRegion(si, fromT, toT) {
-    if (!(toT > fromT + 1e-9)) return false;
-    const s = state.strokes[si];
-    if (!s || s.pts.length < 2) return false;
-    const makesFarEnd = toT < 1 - 1e-9;
-    const makesNearEnd = fromT > 1e-9;
-    if (!makesFarEnd && !makesNearEnd) return false;   // whole stroke tapped, nothing to cut
-
-    // Capture the ORIGINAL points first. cutInPlace mutates s.pts in place, so reading
-    // s.pts after a cut splits the ALREADY-SHRUNKEN stroke -- which silently produced the
-    // wrong surviving half (left of the tap instead of right of it).
-    const orig = s.pts;
-
-    // 1. The FAR survivor: keep the tail (toT,1] as a brand-new stroke at the original slot.
-    if (makesFarEnd && makesNearEnd) {
-      const pieces = splitPointsAt(orig, toT);
-      if (!pieces) return false;
-      state.strokes.splice(si + 1, 0, { tool: s.tool, color: s.color, size: s.size, pts: pieces[1] });
-    }
-    // 2. The NEAR side: trim everything after fromT away.
-    if (makesNearEnd) {
-      const pieces = splitPointsAt(orig, fromT);
-      if (!pieces) return false;
-      s.pts = pieces[0];
-    } else if (makesFarEnd) {
-      // Tap covers the start: keep the end, drop the head.
-      const pieces = splitPointsAt(orig, toT);
-      if (!pieces) return false;
-      s.pts = pieces[1];
-    }
-    return true;
-  }
-
-  // ---------- erase to intersection (the MVP, and the whole of it) ----------
-  // Tap = pick the LINE the drawing eye is on, then erase to the nearest crossing on each side.
-  // ONE gesture, ONE action. No modes, no menu. The grammar is not designed yet.
+  }  // ---------- erase (one eraser, and it is a rubber) ----------
+  // THE OLD ERASE ASKED A GEOMETRY QUESTION. Tap a line, find the nearest crossing on each
+  // side, delete the piece between them. It was beautiful and it was wrong: on a clean
+  // crossing it cut; on a line that merely came close it did nothing; on a junction it
+  // guessed a side. Owner, 2026-11-11: "o erase to intersection eh confuso. as vezes
+  // funciona as vezes nao." A tool that sometimes works is not a tool, it is a coin.
   //
-  // Which line: tap ON a crossing sits at distance 0 from BOTH lines, so a plain
-  // "closest segment wins" tie-break picked whichever happened to come last (the
-  // vertical), and then found no crossing bracket on it -> the gesture answered with
-  // silence. A tie is broken toward the line the tap is ALONG: the tap direction matching
-  // the segment direction is what a person means when they touch a line at a junction.
-  // Still a tie (perfect X)? Prefer the LONGER stroke -- the one being trimmed, not the
-  // short butting one.
-  // Tap priority, compared IN ORDER. Do not fold these into one number: a tie-breaker
-  // must never be able to beat a real distance difference.
-  //  1. CLOSEST line. A tap on a clear stretch of one line must never be stolen.
-  //  2. LONGEST stroke within tolerance. On a junction both are at distance 0, and
-  //     "axis" does NOT disambiguate (a tap mid-height on a vertical is on its axis too).
-  //     What a person means by touching a junction is the line the junction sits ON -- the
-  //     long line being subdivided, not the short line that crosses it.
-  //  3. MORE CROSSINGS, then the axis, as last resorts.
-  function betterTap(c, best) {
-    if (!best) return true;
-    if (c.d < best.d - 1) return true;          // 1px tolerance: a tap ON a junction is 0 for both
-    if (c.d > best.d + 1) return false;
-    if (c.len > best.len * 1.25) return true;
-    if (c.len * 1.25 < best.len) return false;
-    if (c.nx !== best.nx) return c.nx > best.nx;
-    return c.onAxis && !best.onAxis;
-  }
+  // A rubber answers ONE question -- is there ink under the finger? -- and the answer is
+  // always the same because it is measured, not inferred. Drag over a line and it goes.
+  // No crossings, no bracketing, no axis matching, no better-tap scoring: those primitives
+  // are gone from the file's hot path, and with them the whole class of "sometimes".
+  //
+  // What it does, exactly:
+  //   - every stroke is tested point against point, with the radius of the eraser;
+  //   - a stroke with a hit is SPLIT into the pieces that survived, so a drag through the
+  //     middle of a line leaves two lines, not one line with a hole it cannot render;
+  //   - one gesture is one undo step (erasedAny, read by endStroke).
+  // The radius comes from the pen size so the eraser is as big as the mark it removes.
+  function eraseRadius() { return Math.max(8, state.size * 1.6); }
 
-  // How much of the tap's offset from a segment runs ALONG that segment, in [0,1].
-  // A tap ON a junction is equidistant from both lines; what disambiguates is which line
-  // the pointer sits on the axis of.
-  function axisMatch(ax, ay, bx, by, x, y) {
-    const sx = bx - ax, sy = by - ay, L = Math.hypot(sx, sy) || 1;
-    const ux = x - ax, uy = y - ay;
-    const along = Math.abs((ux * sx + uy * sy) / L);
-    const perp = Math.abs((ux * sy - uy * sx) / L);
-    return along / (along + perp + 1e-6);
-  }
+  // HOW WIDE DOES A STROKE ACTUALLY PAINT? It is not s.size: radiusFor() caps the nib at
+  // radius 0.5px so the raster always has something to draw, which means every line drawn at
+  // pression 1 (i.e. every MOUSE line and every finger line, remapped to 1.0 with EXP=2.6)
+  // paints 1.1px wide while its own size says 6. Measured on the shipped app (Chromium, dpr 3):
+  // a 6px line renders 1.1px. So the body of an ink stroke is up to radiusFor(size, 1) wide,
+  // and a rubber that ignores it can pass through the body of a thin line that sits more than
+  // R away from every sample -- the line is under the finger and survives. That family of miss
+  // is "as vezes funciona, as vezes nao".
+  function strokeRadius(s) { return radiusFor(s.size, 1); }
 
-  // The next crossing strictly PAST `tapT` in direction dir (-1 = before, +1 = after).
-  // -1e9 / +1e9 mean "no crossing on that side": the cut runs to the end of the line.
-  function nextCrossing(cs, tapT, dir) {
-    let best = dir > 0 ? 1e9 : -1e9;
-    for (const c of cs) {
-      if (dir > 0) { if (c.t > tapT + 1e-6 && c.t < best) best = c.t; }
-      else { if (c.t < tapT - 1e-6 && c.t > best) best = c.t; }
-    }
-    return best;
-  }
-
-  function strokeLength(s) {    let L = 0;
-    for (let i = 1; i < s.pts.length; i++) L += Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]);
-    return L;
-  }
-
-  function eraseToIntersection(pp) {
-    const x = pp[0], y = pp[1];
-    // One tap is one undo step. The flag is read by endStroke(): it pushes history ONCE
-    // per gesture. The eraser must never push by itself -- pushHistory() snapshots the
-    // state AFTER the mutation, so an extra push would bury the pre-cut state and leave
-    // Undo with nothing to restore.
-    const done = eraseToIntersectionInner(x, y);
-    if (done) erasedAny = true;
-    return done;
-  }
-
-  function eraseToIntersectionInner(x, y) {
-    let bestI = -1, bestA = 0, bestB = 0, best = null;
-    for (let i = state.strokes.length - 1; i >= 0; i--) {
-      const s = state.strokes[i], p = s.pts;
-      if (s._welcome || p.length < 2) continue;
-      const nx = crossingsFor(i, state.strokes).length;
-      const len = strokeLength(s);
-      for (let k = 1; k < p.length; k++) {
-        const a = p[k - 1], b = p[k];
-        if (Math.hypot(b[0] - a[0], b[1] - a[1]) < SEG_MIN) continue;
-        if (!segHit(a, b, x, y)) continue;
-        const d = distToSeg(x, y, a[0], a[1], b[0], b[1]);
-        const cand = { d, len, nx, onAxis: axisMatch(a[0], a[1], b[0], b[1], x, y) > 0.9 };
-        if (betterTap(cand, best)) { best = cand; bestI = i; bestA = k - 1; bestB = k; }
+  function eraseAt(pp) {
+    const x = pp[0], y = pp[1], R = eraseRadius();
+    const R2 = R * R;
+    let touched = false;
+    const out = [];
+    for (const s of state.strokes) {
+      const p = s.pts;
+      if (s._welcome || p.length < 2) { out.push(s); continue; }
+      // Which SEGMENTS are under the rubber. A point test asks "is this sample inside the
+      // rubber", which is not the same question as "is this INK inside the rubber": a stroke is
+      // a polyline painted from sample to sample, and the samples are wherever the device
+      // reported them -- on a fast line, 30-40px apart, which is wider than the rubber is.
+      // A finger that lands between two samples touched the line and touched no sample; the
+      // lens for that is the distance from the finger to the SEGMENT, widened by the width the
+      // stroke itself paints there. Measured (Chromium, finger): a still tap at (200,390) on a
+      // horizontal line left 628 px of ink untouched under the finger and the tool said nothing.
+      // Same family as the erase-to-intersection coin, one layer down.
+      //
+      // The half-open rule (a segment is asked when one of its ends is not yet decided) also
+      // makes the answer INDEPENDENT OF SAMPLE SPACING: a long gap can no longer straddle the
+      // rubber and hide from both of the tests above.
+      // A segment is asked when ANY of its ends is undecided. Under that half-open rule each
+      // segment is measured exactly once, whatever the sample spacing is, so the answer cannot
+      // depend on WHERE the finger lands relative to the sampling.
+      const Rgeo = R + strokeRadius(s);
+      const hits = new Array(p.length).fill(false);
+      let any = false;
+      for (let i = 0; i < p.length; i++) {
+        const near = Math.hypot(p[i][0] - x, p[i][1] - y) <= R;
+        const segUnder = i > 0 && (!hits[i - 1] || !hits[i])
+          && distToSeg(x, y, p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]) <= Rgeo;
+        if (near || segUnder) { hits[i] = true; any = true; }
       }
+      if (!any) { out.push(s); continue; }
+      touched = true;
+      // KEEP THE SURVIVING RUNS. A run is a maximal set of consecutive unmarked points.
+      // A run of 1 point is a STUB -- the fragment left at the edge of the rubber. It is not
+      // a line, it cannot be erased again (the old eraser ignored `p.length < 2`), and on the
+      // page it is a speck of dirt that nobody can touch. It is dropped here, which is also
+      // what makes "erase near the end" behave: sweeping the end of a line leaves nothing.
+      const keepRun = (run) => {
+        if (run.length >= 2) { out.push({ tool: s.tool, color: s.color, size: s.size, pts: run }); }
+      };
+      let run = [];
+      for (let i = 0; i < p.length; i++) {
+        if (hits[i]) { keepRun(run); run = []; }
+        else { run.push(p[i]); }
+      }
+      keepRun(run);
     }
-    if (bestI < 0) {
-      // Never silence (criterion 4). A tap that hit no stroke is ambiguous -- it usually
-      // means the erase ran before the drawing was on screen -- so it must SAY so.
-      flash('Erase: tap on a line');
-      return false;
-    }
-    const s = state.strokes[bestI], total = s.pts.length - 1;
-    // Crossings arrive DUPLICATED: a vertical stroke is many small segments, and the
-    // crossing lands in two of them (or the segment end is shared by two segments), so
-    // crossingsFor reports the same point twice. Dedupe by position, or the bracket
-    // reads the same crossing as both `before` and `after`.
-    const cs = [];
-    for (const c of crossingsFor(bestI, state.strokes)) {
-      if (!cs.some(o => Math.abs(o.t - c.t) < 1e-6)) cs.push(c);
-    }
-    cs.sort((a, b) => a.t - b.t);
-    // An isolated line has no crossings. The tap still means "erase here": a self-cut
-    // at the tap point, so the two halves survive separately. No crossings at all is
-    // a different thing from "nothing to do" -- the MVP must never answer with silence.
-    const selfCut = cs.length === 0;
-    // Parameter of the tap along the whole stroke.
-    const ta = s.pts[bestA], tb = s.pts[bestB];
-    const dx = tb[0] - ta[0], dy = tb[1] - ta[1], l2 = dx * dx + dy * dy || 1;
-    let lt = ((x - ta[0]) * dx + (y - ta[1]) * dy) / l2;
-    lt = Math.max(0, Math.min(1, lt));
-    const tapT = (bestA + lt) / total;
-    // Crossings bracketing the tap. `before` = last crossing at/left of the tap, `after` = first one past it.
-    let before = -1e9, after = 1e9;
-    for (const c of cs) { if (c.t < tapT && c.t > before) before = c.t; }
-    for (const c of cs) { if (c.t >= tapT && c.t < after) after = c.t; }
-    // A crossing that sits ON the tap cannot bound the region: a region ending AT the
-    // junction puts the deleted gap on the wrong side. So the region is the OTHER side of
-    // that junction -- the piece between this crossing and the next one outward. That is
-    // what the eye means by touching a junction: "this gap" (Gibson: the invariant is the
-    // crossing, and the thing between two crossings is the piece).
-    // No crossing outward -> the piece runs to the end of the line (never silence).
-    const TAP_EPS = 1e-6;
-    const onBefore = before > -1e9 && tapT - before < TAP_EPS;
-    const onAfter = after < 1e9 && after - tapT < TAP_EPS;
-    if (onBefore || onAfter) {
-      const j = onBefore ? before : after;
-      // Tap on the junction: the cut starts AT the junction and runs to the next crossing
-      // beyond it. With nothing beyond, it runs to the end of that side.
-      before = j;
-      after = nextCrossing(cs, j, +1);
-      if (after >= 1e9) { before = nextCrossing(cs, j, -1); after = j; }
-    }
-    const hasBefore = before > -1e9, hasAfter = after < 1e9;
+    if (!touched) return false;
+    state.strokes = out;
+    erasedAny = true;
+    redrawAll();
+    return true;
+  }
 
-    // Erase to intersection: kill the segment under the tap, stop at the nearest crossing
-    // on each side. No crossing on a side means run to that end of the line.
-    // On an isolated line both sides run to the ends, so fromT === toT === tapT:
-    // hand that case to the split primitive instead of a zero-width delete.
-    if (selfCut) {
-      const pieces = splitPointsAt(s.pts, tapT);
-      // Never answer with silence, and never leave the tool in a half-state: a tap too near
-      // an end says so and leaves the drawing untouched.
-      if (!pieces) { erasing = false; erasedAny = false; flash('Too close to the end'); return false; }
-      // SEG_EPS leaves a sub-pixel gap between the halves; widen it so the cut LOOKS cut
-      // at 1:1, then store the halves without the gap.
-      const gap = Math.max(SEG_EPS * 2, state.size * 0.75), n = s.pts.length - 1;
-      const head = pieces[0].slice(), tail = pieces[1].slice();
-      const h = head[head.length - 1], t0 = tail[0];
-      const L = Math.hypot(t0[0] - h[0], t0[1] - h[1]) || 1;
-      const ux = (t0[0] - h[0]) / L, uy = (t0[1] - h[1]) / L;
-      head[head.length - 1] = [h[0] - ux * gap, h[1] - uy * gap, h[2]];
-      tail[0] = [t0[0] + ux * gap, t0[1] + uy * gap, t0[2]];
-      s.pts = head;
-      state.strokes.splice(bestI + 1, 0, { tool: s.tool, color: s.color, size: s.size, pts: tail });
-      redrawAll(); flash('Cut line in two');
-      return true;
-    }
-    const fromT = hasBefore ? before : 0;
-    const toT = hasAfter ? after : 1;
+  // A pointerdown that decided NOT to draw must not leave the app latched: pointers/
+  // activeId/gesture keep their entry otherwise, and the next real gesture is swallowed
+  // as "a second pointer". That is how a refusal turns into a freeze.
+  function neutraliseAfterTap() {
+    requestAnimationFrame(() => { pointers.clear(); gesture = null; });
+  }
 
-    // GUARD -- never silence (criterion 4 of the grammar). If fromT/toT still span the
-    // WHOLE stroke, deleteRegion refuses and the tap would answer with nothing. That can
-    // only happen when the cut would take everything, so take the SHORTER side: the smaller
-    // loss, and one Undo away.
-    if (fromT <= 1e-9 && toT >= 1 - 1e-9) {
-      const j = cs.length ? cs[0].t : tapT;
-      const [lo, hi] = j <= 0.5 ? [0, j] : [j, 1];
-      const okCut = deleteRegion(bestI, lo, hi);
-      if (okCut) { redrawAll(); flash('Erased to intersection'); }
-      return okCut;
-    }
+  // May this pointer lay ink on the pen object? Mouse: never (it has no pressure and
+  // cannot make an illo line). Touch and pen: unless inkIsPen is set and the pointer is
+  // not a pen. A device that cannot report pressure still writes with the FLOOR width;
+  // refusing the stroke outright is a decision the drawing does not support.
+  function mayInk(e) {
+    // A MOUSE NEVER INKS. That is the whole of the rule the owner asked for on 2026-10-27
+    // ("não dava pra desenhar sem caneta"): a device that cannot report pressure cannot
+    // make a true illo line (epic illo-line-vs-brush).
+    //
+    // THE FINGER DOES. What was here before:
+    //     if (e.pointerType === 'mouse') return false;
+    //     if (e.pointerType === 'pen')   return true;
+    //     return !inkIsPen;              // <- fingernail on the door
+    // and `toolPen.onclick` set `inkIsPen = true`, so CHOOSING THE PEN OBJECT locked the
+    // finger out -- and the flag was persisted, so it survived the reload. That is the
+    // paralysis the owner hit on 2026-10-29 20:10 ("aaand... it paralyzed again"): after
+    // one tap on the pen object, no finger could draw, and no message said why, because the
+    // refusal is now silent by his own instruction.
+    //
+    // Measured: draw with a finger (10800 px of ink) -> choose the pen object -> draw again
+    // -> 0 px, forever. A tool selection is not a hardware claim. The pointer type answers
+    // "what is touching the glass"; it does not answer "may this make a mark", and it never
+    // could.
+    return e.pointerType !== 'mouse';
+  }
 
-    const removed = deleteRegion(bestI, fromT, toT);
-    if (removed) { redrawAll(); flash('Erased to intersection'); }
-    return removed;
+  function setUI() {
+    // The dock must SHOW the state that was restored. Without this the app booted with
+    // Pan in `state` and the Pen shown as active, so a finger drag drew instead of
+    // panning -- the tool that was saved was not the tool on screen.
+    [['toolPen', 'pen'], ['toolEraser', 'eraser']].forEach(([id, name]) => {
+      const el = document.getElementById(id);
+      el.classList.toggle('active', state.tool === name);
+      el.setAttribute('aria-pressed', String(state.tool === name));
+    });
+    markSwatch();
+    setSize(state.size);
+    setCursor();
   }
 
   function unmergePoints(pts) {
@@ -653,8 +681,9 @@
     }
     return r;
   }
-  canvas.addEventListener('pointerup', endStroke);
-  canvas.addEventListener('pointercancel', endStroke);
+  document.addEventListener('pointermove', handleMove);
+  document.addEventListener('pointerup', endStroke);
+  document.addEventListener('pointercancel', endStroke);
   canvas.addEventListener('lostpointercapture', (e) => { if (e.pointerId === activeId) endStroke(e); });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -667,7 +696,11 @@
   // ---------- tools / ui ----------
   function setTool(t) {
     state.tool = t;
-    [['toolPen', 'pen'], ['toolEraser', 'eraser'], ['toolPan', 'pan']].forEach(([id, name]) => {
+    // A tool chosen mid-stroke must act mid-stroke. Without this the choice was written to
+    // state and the in-flight gesture kept the OLD tool's branch -- pick Pan while a line
+    // is on the canvas and the line keeps growing. Abort first, then switch.
+    if (activeId !== null) abortDrawing();
+    [['toolPen', 'pen'], ['toolEraser', 'eraser']].forEach(([id, name]) => {
       const el = document.getElementById(id);
       el.classList.toggle('active', t === name); el.setAttribute('aria-pressed', String(t === name));
     });
@@ -676,47 +709,43 @@
   }
   document.getElementById('toolPen').onclick = () => setTool('pen');
   document.getElementById('toolEraser').onclick = () => setTool('eraser');
+  // THE LEDGER HAD NO DOOR (owner, 2026-10-29): undo/redo/clear were implemented and
+  // reachable only by Cmd+Z -- on a fullscreen phone with no keyboard that is "does not
+  // exist". One undo, one redo, one clear, in the dock.
+  document.getElementById('toolUndo').onclick = () => { undo(); };
+  document.getElementById('toolRedo').onclick = () => { redo(); };
   // Build version -- visible so "is this the version I tested?" has an answer.
-  const APP_VERSION = '0.3.0';
+  const APP_VERSION = '0.4.0';
   (function stampVersion() {
     document.title = 'Illo · v' + APP_VERSION;
   })();
-  document.getElementById('toolPan').onclick = () => setTool('pan');
 
-  const swatchWrap = document.getElementById('swatches');
-  COLORS.forEach(c => {
-    const b = document.createElement('button');
-    b.className = 'swatch'; b.style.background = c; b.dataset.c = c;
-    b.title = c; b.setAttribute('aria-label', 'Color ' + c);
-    b.onclick = () => { state.color = c; if (state.tool === 'eraser') setTool('pen'); markSwatch(); };
-    swatchWrap.appendChild(b);
-  });
-  function markSwatch() { document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('sel', s.dataset.c === state.color)); }
-
-  // SIZE HAS NO PANEL (owner, 2026-10-28: "o meuzinho abaixo com tool e TAMANHO. deleta.").
-  // The dock button IS the read-out: a dot the size of the nib. Tap it to step up,
-  // [ and ] to step down/up. One knob, no second surface.
-  const sizeDot = document.getElementById('sizeDot');
-  document.getElementById('toolSize').onclick = () => setSize(state.size >= 24 ? 1 : state.size + 2);
-  // RELOAD (owner, 2026-10-29): "não existe recarregar página. não há keyboard. É fullscreen."
-  // A fullscreen PWA opens with no address bar and no keyboard, so "just reload" was not
-  // an instruction the owner could follow. The dock carries the reload instead: it saves
-  // first, so a reload never costs a stroke, and it is a plain object after the tools --
-  // not a menu, not hidden behind a long press.
-  function reloadApp() {
-    save();
-    location.reload();
+  // FOUR OBJECTS, AND THAT IS THE DOCK. Owner, 2026-11-11: "eu tiraria todos os outros
+  // functions. cor, reload. so teria pen, eraser, undo, redo."
+  // Removed from the dock, and from the app: pan (the paper is bigger than the screen only
+  // because zoom exists -- with no zoom it is a control that does nothing visible), size
+  // (a dot you had to tap to discover a size you could not see), reload (a page reload is
+  // not a drawing tool), clear (undo already reaches an empty page), and the 8 swatches
+  // (a colour picker is a decision, and the MVP is one line and one rubber).
+  // They are DELETED, not hidden: a dead object in the dock is exactly the "button that
+  // does nothing" the owner rejected, and hiding it only postpones the complaint.
+  // The keyboard still has them -- see onKey -- because a laptop is not a phone.
+  function clearPage() {
+    // ZERO NOTIFICATIONS: clear on an empty page is nothing happening, not an outcome.
+    if (!state.strokes.some(s => !s._welcome)) return;
+    state.strokes = []; redrawAll(); pushHistory();
   }
-  document.getElementById('toolReload').onclick = reloadApp;
-  function setSize(n) {
-    state.size = Math.max(1, Math.min(48, Math.round(n)));
-    const d = Math.max(4, Math.min(38, state.size));
-    sizeDot.style.width = d + 'px'; sizeDot.style.height = d + 'px';
-    save();
-  }
+  function reloadApp() { save(); location.reload(); }
+  function setSize(n) { state.size = Math.max(1, Math.min(48, Math.round(n))); save(); }
+  function markSwatch() { /* no swatches on screen: one colour, set by the app */ }
 
   // ---------- undo / redo / clear ----------
-  function snapshot() { return JSON.stringify(state.strokes); }
+  // A DEMO IS NOT A UNDO STEP. `_welcome` strokes are filtered out of the drawing by save(),
+  // by export and by the first real touch, so a snapshot that contains one records a state
+  // the app can never return to -- Undo from the first stroke restored the wave instead of
+  // the blank page, and every Undo after that was one step off. The history stores only the
+  // page: what the hands made.
+  function snapshot() { return JSON.stringify(state.strokes.filter(s => !s._welcome)); }
   function pushHistory() {
     const snap = snapshot();
     if (history[hIndex] === snap) { updateUndo(); return; }
@@ -725,8 +754,11 @@
     hIndex = history.length - 1; updateUndo(); scheduleSave();
   }
   function updateUndo() {
-    // Undo and redo have no buttons any more -- the surface is the dock and ?.
-    // The functions stay, reachable by ⌘Z / ⌘⇧Z, so this only guards.
+    // The dock objects show what exists to undo/redo. An object that cannot act dims:
+    // attention, not a corpse.
+    const u = document.getElementById('toolUndo'), r = document.getElementById('toolRedo');
+    if (u) u.setAttribute('aria-disabled', String(hIndex <= 0));
+    if (r) r.setAttribute('aria-disabled', String(hIndex >= history.length - 1));
   }
   function undo() { if (hIndex <= 0) return; hIndex--; state.strokes = JSON.parse(history[hIndex]); redrawAll(); updateUndo(); scheduleSave(); }
   function redo() { if (hIndex >= history.length - 1) return; hIndex++; state.strokes = JSON.parse(history[hIndex]); redrawAll(); updateUndo(); scheduleSave(); }
@@ -750,7 +782,7 @@
   }
   function exportPNG() {
     const bb = bbox();
-    if (!bb) { flash('Nothing to export yet'); return; }
+    if (!bb) return;   // ZERO NOTIFICATIONS: nothing to export is nothing happening.
     const pad = 24, MAXDIM = 8192;
     let scale = 2;
     const maxNeeded = Math.max(bb.w + pad * 2, bb.h + pad * 2);
@@ -805,7 +837,7 @@
   function save() {
     try {
       const strokes = state.strokes.filter(s => !s._welcome);
-      localStorage.setItem(STORE, JSON.stringify({ strokes, tool: state.tool, color: state.color, size: state.size, camera: { x: camera.x, y: camera.y, zoom: camera.zoom } }));
+      localStorage.setItem(STORE, JSON.stringify({ strokes, tool: state.tool, inkIsPen, color: state.color, size: state.size, camera: { x: camera.x, y: camera.y, zoom: camera.zoom } }));
       if (saveFailed) { saveFailed = false; saveBanner(false); }
     } catch (e) { if (!saveFailed) { saveFailed = true; saveBanner(true); } }
   }
@@ -822,6 +854,7 @@
       if (d) {
         state.strokes = sanitizeStrokes(d.strokes);
         if (d.tool === 'pen' || d.tool === 'eraser') state.tool = d.tool;
+        if (typeof d.inkIsPen === 'boolean') inkIsPen = d.inkIsPen;
         if (typeof d.color === 'string') state.color = d.color;
         if (Number.isFinite(+d.size)) state.size = Math.max(1, Math.min(48, +d.size));
         if (d.camera) camera = { x: Number.isFinite(+d.camera.x) ? +d.camera.x : 0, y: Number.isFinite(+d.camera.y) ? +d.camera.y : 0, zoom: clampZoom(Number.isFinite(+d.camera.zoom) && +d.camera.zoom > 0 ? +d.camera.zoom : 1) };
@@ -845,8 +878,10 @@
     else if (e.key === 's' || e.key === 'S') setSize(state.size + 2);
     else if (e.key === '[') setSize(state.size - 2);
     else if (e.key === ']') setSize(state.size + 2);
-    else if (e.key === 'h' || e.key === 'H') setTool('pan');
+    // H is gone with the pan object: space-drag still pans on a laptop.
     else if (e.key === 'r' || e.key === 'R') reloadApp();
+    else if (e.key === 'u' || e.key === 'U') undo();
+    else if (e.key === 'y' || e.key === 'Y') redo();
     else if (e.code === 'Space') { const ae = document.activeElement; if (!(ae && (ae.tagName === 'BUTTON' || ae.tagName === 'INPUT')) && !spaceHeld) { spaceHeld = true; setCursor(); e.preventDefault(); } }
   });
 
@@ -954,9 +989,9 @@
   // saveIlloFile / openIlloFile are gone (owner, 2026-10-28). Kept as a draft.
   // ---------- init ----------
   const hadSaved = load();
-  setTool(state.tool);
-  markSwatch();
-  setSize(state.size);
+  // Restore the SURFACE, not only the state. setTool() is not used here because it also
+  // SAVES, and a save on boot writes over the store before the first stroke.
+  setUI();
   updateZoomLabel();
   updateUndo();
   resize();
@@ -968,7 +1003,23 @@
     state.strokes.push({ tool: 'pen', color: '#7C3AED', size: 8, pts: wave, _welcome: true });
     redrawAll();
   }
-  history = [snapshot()]; hIndex = 0; updateUndo();
+  // THE WELCOME WAVE IS NOT HISTORY. It is a demo that vanishes on the first touch, so a
+  // snapshot containing it is a state the drawing can never return to: Undo from the first
+  // real stroke restored the wave instead of the empty page, and every later Undo was one
+  // step off. The baseline is the page WITHOUT the demo -- what the sheet was before hands.
+  history = [snapshot()]; hIndex = 0;
+
+  // THE WELCOME WAVE VANISHES ON THE FIRST STROKE. It is a demo, not a line -- and it
+  // was CUTTING the first real line: `_welcome` was skipped by save()/export but NOT by
+  // erase, so a first stroke that crossed the wave was cut down to the crossing and the
+  // store came back with one segment instead of the line the hand drew. A demo that
+  // eats the first drawing is not a welcome. One stroke, and it is gone.
+  canvas.addEventListener('pointerdown', function dropWelcome() {
+    const before = state.strokes.length;
+    state.strokes = state.strokes.filter(s => !s._welcome);
+    if (state.strokes.length !== before) redrawAll();
+    canvas.removeEventListener('pointerdown', dropWelcome);
+  }, { once: true, capture: true });
 })();
 </script>
 </body>

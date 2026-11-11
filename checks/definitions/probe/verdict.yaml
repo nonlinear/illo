@@ -1,0 +1,32 @@
+# Check: illo.probe.verdict
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.probe.verdict
+version: 1.0.0
+predicate: probe_cannot_lie_about_pressure
+source: node
+target: probe.html verdict()
+lifecycle: active
+
+context:
+  requires: ["probe.html"]
+
+preconditions: []
+
+execution:
+  - action: require
+    args: {"tokens": [">= 2 distinct", "0.5"]}
+
+assertion: >
+  verdict() requires 2+ distinct pressure values and treats 0.5 as unknown
+
+failure_classification:
+  missing: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/probe-verdict.sh
+depends_on: []

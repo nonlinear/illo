@@ -1,0 +1,35 @@
+# Check: illo.app.erase
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.erase
+version: 2.0.0
+predicate: eraser_is_a_rubber
+source: node
+target: real eraseAt extracted from index.html
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: ["extraction_succeeded"]
+
+execution:
+  - action: extract_functions
+    args: {"names": ["distToSeg", "radiusFor", "eraseRadius", "strokeRadius", "eraseAt"]}
+  - action: run_cases
+    args: {"file": ".erase-test.mjs"}
+
+assertion: >
+  10/10 cases pass: 7 topology (v1) + 3 metric (v2)
+
+failure_classification:
+  case_failed: FAIL /ASSERTION
+  extraction_empty: FAIL /INFRASTRUCTURE
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-erase.sh
+depends_on: []

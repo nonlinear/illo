@@ -1,0 +1,33 @@
+# Check: illo.repo.clean-tree
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.repo.clean-tree
+version: 1.0.1
+predicate: app_on_disk_equals_index
+source: local_git
+target: index.html
+lifecycle: active
+
+context:
+  requires: ["git", "index.html"]
+
+preconditions: ["git_repo_present"]
+
+execution:
+  - action: compare
+    args: {"on": "commit", "against": "index"}
+    via: git
+
+assertion: >
+  on commit the working index.html equals the staged blob; on other triggers it equals HEAD
+
+failure_classification:
+  mismatch: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/repo-clean-tree.sh
+depends_on: []

@@ -1,0 +1,35 @@
+# Check: illo.app.reload
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.reload
+version: 1.0.0
+predicate: reload_object_after_tools_saves_first
+source: local_static
+target: dock in index.html
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: []
+
+execution:
+  - action: locate
+    args: {"dock": "toolPen < toolEraser < toolPan < toolReload"}
+  - action: require
+    args: {"tokens": ["save()", "location.reload()"]}
+
+assertion: >
+  toolReload is a dock object after the tools, wired to reloadApp, which saves then reloads
+
+failure_classification:
+  order: FAIL /ASSERTION
+  no_save: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-reload.sh
+depends_on: []

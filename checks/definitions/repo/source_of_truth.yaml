@@ -1,0 +1,33 @@
+# Check: illo.repo.source
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.repo.source
+version: 1.0.0
+predicate: served_copy_equals_disk_copy
+source: local_stack
+target: served index.html
+lifecycle: active
+
+context:
+  requires: ["server", "index.html"]
+
+preconditions: ["port_3003_listening"]
+
+execution:
+  - action: hash_compare
+    args: {"served": "http://127.0.0.1:3003/", "disk": "index.html"}
+
+assertion: >
+  sha256(served) == sha256(disk)
+
+failure_classification:
+  no_server: ENVIRONMENT BLOCKED
+  mismatch: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log", "hash.txt"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/repo-source-of-truth.sh
+depends_on: []

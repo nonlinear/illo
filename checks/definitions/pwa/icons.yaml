@@ -1,0 +1,32 @@
+# Check: illo.pwa.icons
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.pwa.icons
+version: 1.0.0
+predicate: manifest_icons_exist_at_declared_sizes
+source: local_static
+target: manifest.webmanifest + icon files
+lifecycle: active
+
+context:
+  requires: ["manifest.webmanifest"]
+
+preconditions: []
+
+execution:
+  - action: decode_png_headers
+    args: {"for": "each manifest icon"}
+
+assertion: >
+  5 icons exist at their declared sizes and apple-touch-icon >= 180
+
+failure_classification:
+  missing: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/pwa-icons.sh
+depends_on: []

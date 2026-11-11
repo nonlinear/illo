@@ -1,0 +1,19 @@
+# Check: illo.app.browser-erase
+# RETIRED 2026-10-29 — superseded by illo.app.erase-finger (version 1.0.0).
+#
+# Why retired, kept on the record: it compared stored stroke POINTS before and after the
+# cut. A correct cut makes the stroke START at the crossing, so the first half vanishes
+# from the point list in a way that reads as "the list shrank", not "the ink left the
+# paper". It printed PASS on a drawing the owner could see was untouched, and it could
+# not distinguish a cut from a reorder. A check that cannot catch its own class of bug is
+# worse than no check: it spends the owner's trust and returns a green light.
+#
+# Superseded_by: illo.app.erase-finger @ 1.0.0
+id: illo.app.browser-erase
+version: 1.0.1
+predicate: RETIRED
+source: none
+target: none
+lifecycle: disabled
+runner: ""
+depends_on: []

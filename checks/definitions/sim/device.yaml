@@ -1,0 +1,35 @@
+# Check: illo.sim.device
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.sim.device
+version: 1.0.0
+predicate: every_gesture_the_owner_named_works_with_a_finger
+source: browser
+target: real Chromium in an Android viewport, input via CDP Input.dispatchTouchEvent
+lifecycle: active
+
+context:
+  requires: ["playwright", "chromium"]
+
+preconditions: ["playwright_installed"]
+
+execution:
+  - action: drive
+    args: {"viewport": "393x851@3x", "has_touch": true, "is_mobile": true, "input": "CDP touch only"}
+  - action: assert
+    args: {"gestures": ["choose tool", "draw", "pan", "erase", "reload"]}
+
+assertion: >
+  all five gestures change state as the owner expects, and no button is covered
+
+failure_classification:
+  no_playwright: ENVIRONMENT BLOCKED
+  gesture_dead: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log", "env.json"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/sim-device-run.sh
+depends_on: []

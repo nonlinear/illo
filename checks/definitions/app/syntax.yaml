@@ -1,0 +1,34 @@
+# Check: illo.app.syntax
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.syntax
+version: 1.0.0
+predicate: every_script_block_parses
+source: node
+target: index.html
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: []
+
+execution:
+  - action: parse
+    args: {"target": "<script> blocks"}
+    via: node new Function
+
+assertion: >
+  script block count >= 1 and every block parses
+
+failure_classification:
+  parse_error: FAIL /ASSERTION
+  no_block: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-syntax.sh
+depends_on: []

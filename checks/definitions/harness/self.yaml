@@ -1,0 +1,34 @@
+# Check: illo.harness.self
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.harness.self
+version: 2.0.0
+predicate: every_check_can_fail
+source: local_static
+target: checks/*.sh
+lifecycle: active
+
+context:
+  requires: ["checks/"]
+
+preconditions: []
+
+execution:
+  - action: scan
+    args: {"for": "FAILURE_TYPE in every script"}
+  - action: scan
+    args: {"for": "executable bit"}
+
+assertion: >
+  every check script is executable and has a failure path
+
+failure_classification:
+  missing: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/harness-self.sh
+depends_on: []

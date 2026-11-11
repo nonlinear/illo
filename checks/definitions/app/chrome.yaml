@@ -1,0 +1,34 @@
+# Check: illo.app.chrome
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.chrome
+version: 1.0.0
+predicate: surface_is_dock_and_help
+source: local_static
+target: index.html
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: []
+
+execution:
+  - action: forbid
+    args: {"tokens": ["<select", "role=\"menu\"", "nonlinear.nyc"]}
+  - action: require
+    args: {"tokens": ["nonlinearstudio.org", "helpFab"]}
+
+assertion: >
+  no menu on the surface and the help object points at nonlinearstudio.org
+
+failure_classification:
+  found: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-chrome.sh
+depends_on: []

@@ -1,0 +1,77 @@
+# Check: illo.app.stroke-from-chrome
+# Origin: owner, 2026-10-29 19:27 — "erase to intersection button does nothing. nothing.
+# I fear you hallucinated a solution. it's been days. I wanna close MVP."
+#
+# He was right, and EVERY check in this repo was green while the app was dead. The reason
+# is one assumption shared by all of them: they drew on the MIDDLE of the paper. The dock
+# is a column on the LEFT of a paper that is also the full screen, and a gesture that
+# began anywhere near it never reached the canvas at all.
+#
+# Two mechanisms, both pinned here:
+#   1. touch-action on the chrome. Chrome's own default for a button is `manipulation`,
+#      which offers tap AND pan. Nothing scrolls under the dock, so a sideways slip over a
+#      button is a pan that cannot happen — and the browser CANCELS the pointer. Measured:
+#      manipulation -> pointercancel | pan-y / pinch-zoom / none -> full stream.
+#   2. the hit path. A gesture that begins over the chrome is delivered to the chrome for
+#      its whole life. A listener on <canvas> never sees it, so the paper must listen on
+#      the document.
+#
+# It also pins the second half of the owner's report — ZERO NOTIFICATIONS — and the shape
+# of a real finger: a thumb that means to tap travels a few pixels, and on this date that
+# travel re-cut the line on every pixel, leaving only the ground the thumb had swept.
+id: illo.app.stroke-from-chrome
+version: 1.0.0
+predicate: a_gesture_that_starts_on_the_dock_still_reaches_the_paper
+source: browser
+target: real Chromium, Android viewport, input via CDP touch only
+lifecycle: active
+
+context:
+  requires: ["playwright", "chromium"]
+
+preconditions: ["playwright_installed"]
+
+execution:
+  - action: select_tool
+    args: {"tool": "pen"}
+  - action: swipedown_at
+    args: {"start": "the dock's empty strip, 6px in", "to": "x=360, same y"}
+  - action: read
+    args: {"what": "stroke count, and the stroke's x span"}
+  - action: select_tool
+    args: {"tool": "eraser", "how": "finger tap on the object"}
+  - action: read
+    args: {"what": "stroke count after the tap (a tap must leave no dot)"}
+  - action: draw_crossing
+    args: {"at": "the tap point, vertical"}
+  - action: thumb_tap
+    args: {"travelling": "a real thumb: ~6 world px, not a perfect contact"}
+  - action: sample_pixels
+    args: {"window": "a box around the tap point"}
+
+assertion: >
+  touch-action on every chrome object is `none` (never `manipulation`/`auto` — the browser
+  cancels the pointer and the stroke never reaches the paper),
+  AND a swipe starting on the dock's empty strip draws ONE stroke spanning the whole width,
+  AND a finger tap on the erase object still selects it,
+  AND that tap leaves NO ink dot behind and does not change the drawing,
+  AND the thumb that travels cuts the line exactly where it touched,
+  AND the far side of the crossing survives,
+  AND the crossing line is not drawn as a cut (the tool was still what the last gesture left),
+  AND nothing is announced.
+
+failure_classification:
+  no_playwright: ENVIRONMENT BLOCKED
+  touch_action_cancels: FAIL / ASSERTION
+  stroke_lost_from_chrome: FAIL / ASSERTION
+  tap_lost: FAIL / ASSERTION
+  tap_left_a_dot: FAIL / ASSERTION
+  cut_not_where_touched: FAIL / ASSERTION
+  wrong_side_taken: FAIL / ASSERTION
+  announcement: FAIL / ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+runner: checks/browser-stroke-from-chrome.sh
+depends_on: []

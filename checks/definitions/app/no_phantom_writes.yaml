@@ -1,0 +1,32 @@
+# Check: illo.app.no-phantom-writes
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.app.no-phantom-writes
+version: 1.0.0
+predicate: pointer_of_no_pressure_maps_to_full_width
+source: local_static
+target: pt() in index.html
+lifecycle: active
+
+context:
+  requires: ["index.html"]
+
+preconditions: []
+
+execution:
+  - action: require
+    args: {"tokens": ["e.pressure", "pointerType === 'pen'"]}
+
+assertion: >
+  pt() reads e.pressure and maps a non-pen pointer to 1.0
+
+failure_classification:
+  missing: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/app-no-phantom-writes.sh
+depends_on: []

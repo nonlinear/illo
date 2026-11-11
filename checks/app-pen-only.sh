@@ -9,7 +9,7 @@ REPO="${1:?repo}"
 python3 - "$REPO/index.html" <<'PY'
 import re, sys
 src = open(sys.argv[1]).read()
-m = re.search(r"canvas\.addEventListener\('pointerdown'.*?(?=canvas\.addEventListener\('pointermove')", src, re.S)
+m = re.search(r"(?:canvas|document)\.addEventListener\('pointerdown'.*?(?=(?:canvas|document)\.addEventListener\('pointermove'|function handleMove)", src, re.S)
 if not m:
     print("FAILURE_TYPE: ASSERTION")
     print("pointerdown handler not found")
@@ -23,7 +23,10 @@ def idx(pat):
         if pat in l:
             return i
     return -1
-gate = idx("pointerType !== 'pen'")
+# The gate moved from a pointerType literal to mayInk() (owner, 2026-10-27: "não dava pra
+# desenhar sem caneta") — the PROPERTY is unchanged: a pointer that may not ink is refused
+# before capture and before the stroke. Anchor on the call, not on its old spelling.
+gate = idx("!mayInk(e)")
 cap = idx("setPointerCapture")
 draw = idx("drawing = {")
 if gate < 0:

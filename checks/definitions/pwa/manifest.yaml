@@ -1,0 +1,32 @@
+# Check: illo.pwa.manifest
+# Kin P09E092 check-contract §1 — every facet resolved. One file, one property.
+# The check answers "which property?", never "why now?" (that is the trigger).
+
+id: illo.pwa.manifest
+version: 1.0.0
+predicate: manifest_is_valid_pwa
+source: local_static
+target: manifest.webmanifest
+lifecycle: active
+
+context:
+  requires: ["manifest.webmanifest"]
+
+preconditions: []
+
+execution:
+  - action: parse_json
+    args: {"require": ["display", "icons", "maskable"]}
+
+assertion: >
+  display is standalone, 5 icons, one maskable
+
+failure_classification:
+  invalid: FAIL /ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+# implementation — the check CONTRACT is above; this is one way to satisfy it
+runner: checks/pwa-manifest.sh
+depends_on: []

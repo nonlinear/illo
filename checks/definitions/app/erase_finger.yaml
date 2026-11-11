@@ -1,0 +1,48 @@
+# Check: illo.app.erase-finger
+# Origin: owner, 2026-10-29 19:27 — "erase to intersection button does nothing. nothing.
+# I fear you hallucinated a solution." The check it replaces (illo.app.browser-erase)
+# compared stroke POINTS before and after, and a correct cut looks like "the stroke now
+# starts at the crossing" -- it called that unchanged and printed PASS. This one reads
+# CANVAS PIXELS: ink present before the tap, absent after, on the tap side only.
+id: illo.app.erase-finger
+version: 1.0.0
+predicate: a_finger_on_the_erase_object_cuts_the_line_at_the_crossing
+source: browser
+target: real Chromium, Android viewport, input via CDP touch only
+lifecycle: active
+
+context:
+  requires: ["playwright", "chromium"]
+
+preconditions: ["playwright_installed"]
+
+execution:
+  - action: draw
+    args: {"gesture": "two crossing finger lines"}
+    via: cdp_touch
+  - action: select_tool
+    args: {"tool": "eraser", "with": "finger"}
+  - action: sample_pixels
+    args: {"window": "40x12 world px just left of the crossing"}
+  - action: tap
+    args: {"at": "150,300", "with": "finger"}
+  - action: sample_pixels_again
+    args: {"same_window": true}
+
+assertion: >
+  ink on the tap side goes from present to absent,
+  AND the far side survives,
+  AND the crossing line is untouched,
+  AND nothing is announced (no flash on the cut, on empty paper, or on a finger on the pen)
+
+failure_classification:
+  no_playwright: ENVIRONMENT BLOCKED
+  ink_unchanged: FAIL / ASSERTION
+  wrong_side_taken: FAIL / ASSERTION
+  announcement: FAIL / ASSERTION
+
+evidence:
+  required: ["result.json", "stdout.log"]
+
+runner: checks/browser-erase-finger.sh
+depends_on: []
